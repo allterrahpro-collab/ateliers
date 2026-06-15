@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Réservations ateliers — Terrah</title>
+<style>
+:root{ color-scheme: light; }
+*{ box-sizing:border-box; }
+body{ margin:0; background:#f7f5f2; color:#241f1a; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; font-size:14px; line-height:1.45; }
+.wrap{ max-width:920px; margin:0 auto; padding:18px 16px 60px; }
+h1{ font-size:20px; margin:0 0 2px; }
+.sub{ color:#7a716a; font-size:12.5px; margin:0 0 16px; }
+.cards{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+.card{ background:#fff; border:1px solid #e7e0d8; border-radius:12px; padding:12px 14px; }
+.card .n{ font-size:24px; font-weight:700; } .card .l{ font-size:11.5px; color:#7a716a; margin-top:2px; }
+.card.alert .n{ color:#c2410c; }
+.section{ background:#fff; border:1px solid #e7e0d8; border-radius:12px; padding:14px 16px; margin-bottom:16px; }
+.section h2{ font-size:15px; margin:0 0 10px; }
+.banner{ border-radius:12px; padding:12px 14px; margin-bottom:16px; font-size:13.5px; }
+.banner.warn{ background:#fff4e8; border:1px solid #f4c89a; color:#8a4b12; }
+.banner.ok{ background:#eef7ee; border:1px solid #bfe0bf; color:#2f6b34; }
+table{ width:100%; border-collapse:collapse; }
+th,td{ text-align:left; padding:8px; border-bottom:1px solid #efe9e2; vertical-align:middle; }
+th{ font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#9b9189; font-weight:600; }
+td.num{ text-align:center; font-variant-numeric:tabular-nums; }
+.pill{ display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:600; }
+.pill.ok{ background:#e7f4e7; color:#2f6b34; } .pill.warn{ background:#fdecd8; color:#a8530f; } .pill.full{ background:#fde0dd; color:#b3261e; }
+.type-tag{ display:inline-block; font-size:11px; padding:1px 7px; border-radius:6px; background:#efeae3; color:#5c544c; }
+.src{ font-size:10.5px; color:#998f86; }
+.foot{ font-size:11.5px; color:#9b9189; margin-top:6px; }
+.cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.cal-wd{ font-size:10.5px; color:#9b9189; font-weight:600; text-align:center; padding:2px 0; }
+.cal-cell{ min-height:62px; border:1px solid #eee7df; border-radius:8px; padding:4px; background:#fff; }
+.cal-empty{ background:transparent; border:none; }
+.cal-day{ font-size:11px; color:#7a716a; margin-bottom:3px; font-weight:600; }
+.cal-chip{ font-size:10px; border-radius:5px; padding:1px 4px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cal-chip.ok{ background:#e7f4e7; color:#2f6b34; } .cal-chip.warn{ background:#fdecd8; color:#a8530f; } .cal-chip.full{ background:#fde0dd; color:#b3261e; }
+.pf-row{ display:flex; align-items:center; gap:10px; padding:5px 0; }
+.pf-name{ width:130px; font-size:13px; } .pf-bar{ flex:1; height:9px; background:#eee7df; border-radius:5px; overflow:hidden; } .pf-bar>i{ display:block; height:100%; background:#8a6d4f; } .pf-val{ width:90px; text-align:right; font-size:12.5px; }
+#gate{ position:fixed; inset:0; background:#f7f5f2; display:flex; align-items:center; justify-content:center; z-index:50; }
+#gate .box{ background:#fff; border:1px solid #e7e0d8; border-radius:14px; padding:26px; width:300px; text-align:center; box-shadow:0 4px 16px rgba(0,0,0,.06); }
+#gate input{ width:100%; padding:9px 10px; border:1px solid #d9d0c7; border-radius:8px; font-size:15px; margin:12px 0; }
+#gate button{ width:100%; background:#8a6d4f; color:#fff; border:none; border-radius:8px; padding:10px; font-size:14px; font-weight:600; cursor:pointer; }
+#gate .err{ color:#b3261e; font-size:12px; min-height:16px; }
+#app{ display:none; }
+@media(max-width:640px){ .cards{ grid-template-columns:repeat(2,1fr);} th.hide,td.hide{ display:none; } }
+</style>
+</head>
+<body>
+<div id="gate">
+  <div class="box">
+    <div style="font-size:15px;font-weight:700">Réservations Terrah</div>
+    <div class="src" style="margin-top:4px">Accès</div>
+    <input type="password" id="pw" placeholder="Mot de passe" autofocus/>
+    <div class="err" id="gateErr"></div>
+    <button id="enter">Entrer</button>
+  </div>
+</div>
+
+<div id="app">
+<div class="wrap">
+  <h1>Réservations ateliers — Terrah</h1>
+  <p class="sub" id="genline"></p>
+
+  <div class="cards" id="cards"></div>
+  <div id="alertBanner"></div>
+
+  <div class="section">
+    <h2>À retirer des plateformes <span class="src" id="pullCount"></span></h2>
+    <p class="foot">Sessions complètes / surbookées (à fermer) et proches de la limite. Retire l'atelier des plateformes indiquées.</p>
+    <div id="pullList"></div>
+  </div>
+
+  <div class="section">
+    <h2>Sessions à venir</h2>
+    <div id="sessions"></div>
+  </div>
+
+  <div class="section">
+    <h2>Par plateforme</h2>
+    <div id="byPlatform"></div>
+  </div>
+
+  <div class="section">
+    <h2>Calendrier</h2>
+    <div id="calendar"></div>
+  </div>
+
+  <p class="foot">Version anonymisée (sans noms clients). Données figées — voir date ci-dessus.</p>
+</div>
+</div>
+
+<script>
+const PW = "terrah2026";
+const GENERATED = "2026-06-15";
+const CAP = { "Latte Art":8, "Dégustation":10, "Torréfaction":6 };
+const THRESHOLD = 2;
+// Données figées, ANONYMISÉES. parts: [plateforme, places]
+const SESSIONS = [
+ {d:"2026-06-19",t:"14:30",type:"Dégustation",parts:[["Wecandoo",1]]},
+ {d:"2026-06-20",t:"10:30",type:"Dégustation",parts:[["Wecandoo",10]]},
+ {d:"2026-06-24",t:"14:30",type:"Latte Art",parts:[["Wecandoo",6]]},
+ {d:"2026-06-26",t:"14:30",type:"Dégustation",parts:[["Wecandoo",1]]},
+ {d:"2026-06-27",t:"10:30",type:"Dégustation",parts:[["Wecandoo",10]]},
+ {d:"2026-06-27",t:"14:30",type:"Latte Art",parts:[["Wecandoo",8],["Shopify",1]]},
+ {d:"2026-06-28",t:"10:30",type:"Dégustation",parts:[["Wecandoo",6]]},
+ {d:"2026-06-28",t:"14:30",type:"Latte Art",parts:[["Wecandoo",5],["Funbooker",1]]},
+ {d:"2026-07-04",t:"10:30",type:"Dégustation",parts:[["Wecandoo",4]]},
+ {d:"2026-07-04",t:"14:30",type:"Latte Art",parts:[["Wecandoo",2]]},
+ {d:"2026-07-05",t:"14:30",type:"Latte Art",parts:[["Wecandoo",2]]},
+ {d:"2026-07-06",t:"14:30",type:"Latte Art",parts:[["Wecandoo",3]]},
+ {d:"2026-07-11",t:"14:30",type:"Latte Art",parts:[["Wecandoo",2]]},
+ {d:"2026-07-12",t:"10:30",type:"Dégustation",parts:[["Wecandoo",2]]},
+ {d:"2026-07-19",t:"14:30",type:"Latte Art",parts:[["Wecandoo",1]]},
+ {d:"2026-07-25",t:"14:30",type:"Latte Art",parts:[["Wecandoo",1]]},
+ {d:"2026-08-01",t:"10:30",type:"Dégustation",parts:[["Wecandoo",2]]},
+ {d:"2026-08-15",t:"14:30",type:"Latte Art",parts:[["Wecandoo",3]]}
+];
+
+const MONTH_NAMES=["jan","fév","mar","avr","mai","juin","juil","aoû","sep","oct","nov","déc"];
+const MONTH_FULL=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+const DAY_NAMES=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
+function dObj(s){const[Y,M,D]=s.d.split('-').map(Number);const[h,m]=s.t.split(':').map(Number);return new Date(Y,M-1,D,h,m);}
+function fmt(dt){return DAY_NAMES[dt.getDay()]+' '+dt.getDate()+' '+MONTH_NAMES[dt.getMonth()]+' '+dt.getFullYear();}
+function total(s){return s.parts.reduce((a,p)=>a+p[1],0);}
+function statusOf(rem){ if(rem<=0) return {cls:'full',label: rem<0?('Surbooké ('+(-rem)+')'):'Complet'}; if(rem<=THRESHOLD) return {cls:'warn',label: rem+' place'+(rem>1?'s':'')+' restante'+(rem>1?'s':'')}; return {cls:'ok',label: rem+' libres'}; }
+
+function render(){
+  const sessions=SESSIONS.map(s=>({...s,dt:dObj(s),tot:total(s),cap:CAP[s.type]||10})).sort((a,b)=>a.dt-b.dt);
+  document.getElementById('genline').textContent='Données figées au '+fmt(new Date(GENERATED))+'. Somme des réservations par session (Wecandoo, Funbooker, Shopify, Cap Adrénaline).';
+  const atRisk=sessions.filter(s=>(s.cap-s.tot)<=THRESHOLD);
+  const part=sessions.reduce((a,s)=>a+s.tot,0);
+  document.getElementById('cards').innerHTML=
+    `<div class="card"><div class="n">${sessions.length}</div><div class="l">sessions à venir</div></div>
+     <div class="card ${atRisk.length?'alert':''}"><div class="n">${atRisk.length}</div><div class="l">proches/limite</div></div>
+     <div class="card"><div class="n">${part}</div><div class="l">participants</div></div>
+     <div class="card"><div class="n">${sessions.filter(s=>s.cap-s.tot<=0).length}</div><div class="l">complètes/surbookées</div></div>`;
+  const ab=document.getElementById('alertBanner');
+  if(atRisk.length){ ab.className='banner warn'; ab.innerHTML='<b>⚠️ '+atRisk.length+' session(s) à surveiller</b> — voir « À retirer des plateformes ».'; }
+  else { ab.className='banner ok'; ab.innerHTML='<b>✅ Rien de critique.</b>'; }
+  const pulls=sessions.map(s=>({s,rem:s.cap-s.tot})).filter(o=>o.rem<=THRESHOLD).sort((a,b)=>a.rem-b.rem);
+  document.getElementById('pullCount').textContent=pulls.length?('('+pulls.length+')'):'';
+  document.getElementById('pullList').innerHTML = pulls.length
+    ? '<table><thead><tr><th>Créneau</th><th>Atelier</th><th class="num">Places</th><th>Statut</th><th>Plateformes à fermer</th></tr></thead><tbody>'+
+      pulls.map(({s,rem})=>{const st=statusOf(rem);const pl=[...new Set(s.parts.map(p=>p[0]))].join(', ');
+        return `<tr><td>${fmt(s.dt)} ${s.t}</td><td><span class="type-tag">${s.type}</span></td><td class="num">${s.tot}/${s.cap}</td><td><span class="pill ${st.cls}">${st.label}</span></td><td class="src">${pl}</td></tr>`;}).join('')+'</tbody></table>'
+    : '<p class="foot">Aucun atelier à retirer pour le moment 🎉</p>';
+  let rows='';
+  sessions.forEach(s=>{ const rem=s.cap-s.tot, st=statusOf(rem); const pl=[...new Set(s.parts.map(p=>p[0]))].join(', ');
+    rows+=`<tr><td>${fmt(s.dt)}</td><td class="num">${s.t}</td><td><span class="type-tag">${s.type}</span></td><td class="num">${s.tot}/${s.cap}</td><td><span class="pill ${st.cls}">${st.label}</span></td><td class="hide src">${pl}</td></tr>`;
+  });
+  document.getElementById('sessions').innerHTML='<table><thead><tr><th>Date</th><th class="num">Heure</th><th>Atelier</th><th class="num">Places</th><th>Statut</th><th class="hide">Plateformes</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  const tally={};sessions.forEach(s=>s.parts.forEach(p=>tally[p[0]]=(tally[p[0]]||0)+p[1]));
+  const order=Object.keys(tally).sort((a,b)=>tally[b]-tally[a]);
+  document.getElementById('byPlatform').innerHTML=order.map(p=>`<div class="pf-row"><div class="pf-name">${p}</div><div class="pf-bar"><i style="width:${Math.round(tally[p]/part*100)}%"></i></div><div class="pf-val">${tally[p]} pers</div></div>`).join('')+`<p class="foot">Total : ${part} participants à venir.</p>`;
+  renderCal(sessions);
+}
+function renderCal(sessions){
+  if(!sessions.length){return;}
+  const first=sessions[0].dt; const y=first.getFullYear(), m=first.getMonth();
+  const byDay={}; sessions.forEach(s=>{ if(s.dt.getFullYear()===y&&s.dt.getMonth()===m){(byDay[s.dt.getDate()]=byDay[s.dt.getDate()]||[]).push(s);} });
+  const startDow=(new Date(y,m,1).getDay()+6)%7, nd=new Date(y,m+1,0).getDate();
+  const wd=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']; let html=wd.map(d=>`<div class="cal-wd">${d}</div>`).join('');
+  for(let i=0;i<startDow;i++) html+='<div class="cal-cell cal-empty"></div>';
+  for(let d=1;d<=nd;d++){ const list=(byDay[d]||[]).sort((a,b)=>a.t.localeCompare(b.t));
+    const chips=list.map(s=>{const rem=s.cap-s.tot,st=statusOf(rem);const lbl=s.type==='Latte Art'?'LA':(s.type==='Torréfaction'?'Torr':'Dég');return `<div class="cal-chip ${st.cls}">${s.t} ${lbl} ${s.tot}/${s.cap}</div>`;}).join('');
+    html+=`<div class="cal-cell"><div class="cal-day">${d}</div>${chips}</div>`; }
+  document.getElementById('calendar').innerHTML='<div style="font-weight:600;margin-bottom:8px">'+MONTH_FULL[m]+' '+y+'</div><div class="cal-grid">'+html+'</div>';
+}
+function unlock(){ const v=document.getElementById('pw').value; if(v===PW){ document.getElementById('gate').style.display='none'; document.getElementById('app').style.display='block'; render(); } else { document.getElementById('gateErr').textContent='Mot de passe incorrect'; } }
+document.getElementById('enter').addEventListener('click',unlock);
+document.getElementById('pw').addEventListener('keydown',e=>{ if(e.key==='Enter') unlock(); });
+</script>
+</body>
+</html>
