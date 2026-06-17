@@ -41,6 +41,11 @@ td.num{ text-align:center; font-variant-numeric:tabular-nums; }
 .pf-row{ display:flex; align-items:center; gap:10px; padding:5px 0; }
 .pf-name{ width:130px; font-size:13px; } .pf-bar{ flex:1; height:9px; background:#eee7df; border-radius:5px; overflow:hidden; } .pf-bar>i{ display:block; height:100%; background:#8a6d4f; } .pf-val{ width:90px; text-align:right; font-size:12.5px; }
 .done{ opacity:.5; }
+.navbtn{ border:1px solid #e7e0d8; background:#fff; border-radius:8px; padding:2px 12px; font-size:16px; line-height:1.4; cursor:pointer; color:#5c544c; }
+.navbtn:hover{ background:#f2ece4; }
+.calhead{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.pf{ display:inline-block; font-size:11px; padding:1px 7px; border-radius:6px; margin:1px 2px 1px 0; }
+.pf.Funbooker{ background:#e7eefc; color:#234a9e; } .pf.Wecandoo{ background:#fbe9e7; color:#9e3322; } .pf.Shopify{ background:#e8f4e1; color:#3f6b22; } .pf.Cap{ background:#efe7fb; color:#5a36a0; } .pf.x{ background:#efeae3; color:#8a8079; }
 @media(max-width:640px){ .cards{ grid-template-columns:repeat(2,1fr);} }
 </style>
 </head>
@@ -78,6 +83,13 @@ const TAB = "Untitled";
 const URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&sheet=" + encodeURIComponent(TAB) + "&tq=" + encodeURIComponent("select A,B,C,D,E,F,G,I,J");
 const CAP = { "Latte Art":8, "Dégustation":10, "Torréfaction":6 };
 const THRESHOLD = 2;
+let LASTROWS=[], LASTSESSIONS=[], CAL_Y=null, CAL_M=null;
+function skey(s){ return s.atelier+'|'+(s.date?s.date.getTime():'')+'|'+s.heure; }
+function pfClass(p){ if(/funbooker/i.test(p))return 'Funbooker'; if(/wecandoo/i.test(p))return 'Wecandoo'; if(/shopify/i.test(p))return 'Shopify'; if(/cap/i.test(p))return 'Cap'; return 'x'; }
+function pfTags(items){ var set=[]; items.forEach(function(i){ if(i.plateforme && set.indexOf(i.plateforme)<0) set.push(i.plateforme); }); if(!set.length) return '<span class="pf x">?</span>'; return set.map(function(p){return '<span class="pf '+pfClass(p)+'">'+p+'</span>';}).join(''); }
+function loadRetire(){ try{ return new Set(JSON.parse(localStorage.getItem('terrah_retire')||'[]')); }catch(e){ return new Set(); } }
+function saveRetire(set){ try{ localStorage.setItem('terrah_retire', JSON.stringify(Array.from(set))); }catch(e){} }
+function toggleRetire(k){ const s=loadRetire(); if(s.has(k)) s.delete(k); else s.add(k); saveRetire(s); render(LASTROWS); }
 
 const MONTH_NAMES=["jan","fév","mar","avr","mai","juin","juil","aoû","sep","oct","nov","déc"];
 const MONTH_FULL=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
@@ -111,7 +123,7 @@ async function load(){
     plateforme:(r[4]||'').trim(), numref:(r[5]||'').trim(), places:parseInt(r[6]||'0',10)||0,
     statut:(r[7]||'').trim().toLowerCase(), effectue:r[8]
   })).filter(r=>r.atelier);
-  render(rows);
+  LASTROWS=rows; render(rows);
 }
 
 function refLabel(r){ return r.plateforme + (r.numref?(' #'+r.numref):''); }
@@ -126,34 +138,40 @@ function render(rows){
     if(!map.has(k)) map.set(k,{atelier:r.atelier,date:r.date,heure:r.heure,items:[],tot:0});
     const s=map.get(k); s.items.push(r); if(r.statut!=='à confirmer') s.tot+=r.places;
   });
-  const sessions=[...map.values()].map(s=>{ s.cap=capOf(s.atelier); return s; }).filter(s=>s.date>=today0).sort((a,b)=>a.date-b.date||a.heure.localeCompare(b.heure));
+  const allSessions=[...map.values()].map(s=>{ s.cap=capOf(s.atelier); return s; }).sort((a,b)=>a.date-b.date||a.heure.localeCompare(b.heure));
+  const sessions=allSessions.filter(s=>s.date>=today0);
+  LASTSESSIONS=allSessions;
 
+  const RETIRE=loadRetire();
   const atRisk=sessions.filter(s=>s.cap-s.tot<=THRESHOLD);
+  const atRiskOpen=atRisk.filter(s=>!RETIRE.has(skey(s)));
   const part=sessions.reduce((a,s)=>a+s.tot,0);
   const adef=rows.filter(r=>/définir/.test(r.statut));
   const adefOpen=adef.filter(r=>!isDone(r.effectue));
   document.getElementById('cards').innerHTML=
     '<div class="card"><div class="n">'+sessions.length+'</div><div class="l">sessions à venir</div></div>'+
-    '<div class="card '+(atRisk.length?'alert':'')+'"><div class="n">'+atRisk.length+'</div><div class="l">proches/limite</div></div>'+
+    '<div class="card '+(atRiskOpen.length?'alert':'')+'"><div class="n">'+atRiskOpen.length+'</div><div class="l">à retirer</div></div>'+
     '<div class="card"><div class="n">'+part+'</div><div class="l">participants</div></div>'+
     '<div class="card"><div class="n">'+adefOpen.length+'</div><div class="l">à définir</div></div>';
 
   const ab=document.getElementById('alertBanner');
-  ab.className=atRisk.length?'banner warn':'banner ok';
-  ab.innerHTML=atRisk.length?('<b>⚠️ '+atRisk.length+' session(s) à surveiller</b> — voir « À retirer des plateformes ».'):'<b>✅ Rien de critique.</b>';
+  ab.className=atRiskOpen.length?'banner warn':'banner ok';
+  ab.innerHTML=atRiskOpen.length?('<b>⚠️ '+atRiskOpen.length+' atelier(s) à retirer des plateformes</b> — coche « Validé » une fois fait.'):'<b>✅ Tout est à jour.</b>';
 
-  const pulls=sessions.map(s=>({s,rem:s.cap-s.tot})).filter(o=>o.rem<=THRESHOLD).sort((a,b)=>a.rem-b.rem);
-  document.getElementById('pullCount').textContent=pulls.length?('('+pulls.length+')'):'';
+  const pulls=sessions.map(s=>({s,rem:s.cap-s.tot})).filter(o=>o.rem<=THRESHOLD)
+    .sort(function(a,b){var ra=RETIRE.has(skey(a.s)),rb=RETIRE.has(skey(b.s)); if(ra!==rb) return ra?1:-1; return a.rem-b.rem;});
+  document.getElementById('pullCount').textContent=atRiskOpen.length?('('+atRiskOpen.length+' à traiter)'):'';
   document.getElementById('pullList').innerHTML = pulls.length
-    ? '<table><thead><tr><th>Créneau</th><th>Atelier</th><th class="num">Places</th><th>Statut</th><th>Réservations</th></tr></thead><tbody>'+
-      pulls.map(function(o){var s=o.s,rem=o.rem,st=statusOf(rem);var refs=s.items.map(refLabel).join(', ');
-        return '<tr><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td class="num">'+s.tot+'/'+s.cap+'</td><td><span class="pill '+st.cls+'">'+st.label+'</span></td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
+    ? '<table><thead><tr><th>Validé</th><th>Créneau</th><th>Atelier</th><th class="num">Places</th><th>Statut</th><th>Réservations</th></tr></thead><tbody>'+
+      pulls.map(function(o){var s=o.s,rem=o.rem,st=statusOf(rem);var refs=s.items.map(refLabel).join(', ');var k=skey(s);var done=RETIRE.has(k);
+        return '<tr class="'+(done?'done':'')+'"><td class="num"><input type="checkbox" data-k="'+encodeURIComponent(k)+'"'+(done?' checked':'')+'></td><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td class="num">'+s.tot+'/'+s.cap+'</td><td><span class="pill '+st.cls+'">'+st.label+'</span></td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
     : '<p class="foot">Aucun atelier à retirer 🎉</p>';
+  Array.prototype.forEach.call(document.querySelectorAll('#pullList input[type=checkbox]'), function(c){ c.addEventListener('change', function(){ toggleRetire(decodeURIComponent(c.getAttribute('data-k'))); }); });
 
   document.getElementById('sessions').innerHTML = sessions.length
-    ? '<table><thead><tr><th>Date</th><th class="num">Heure</th><th>Atelier</th><th class="num">Places</th><th>Statut</th><th>Réservations</th></tr></thead><tbody>'+
+    ? '<table><thead><tr><th>Date</th><th class="num">Heure</th><th>Atelier</th><th>Plateforme</th><th class="num">Places</th><th>Statut</th><th>Réservations</th></tr></thead><tbody>'+
       sessions.map(function(s){var rem=s.cap-s.tot,st=statusOf(rem);var refs=s.items.map(function(i){return refLabel(i)+' ×'+i.places+(i.statut==='à confirmer'?' (à confirmer)':'');}).join(' · ');
-        return '<tr><td>'+fmt(s.date)+'</td><td class="num">'+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td class="num">'+s.tot+'/'+s.cap+'</td><td><span class="pill '+st.cls+'">'+st.label+'</span></td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
+        return '<tr><td>'+fmt(s.date)+'</td><td class="num">'+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td>'+pfTags(s.items)+'</td><td class="num">'+s.tot+'/'+s.cap+'</td><td><span class="pill '+st.cls+'">'+st.label+'</span></td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
     : '<p class="foot">Aucune session à venir.</p>';
 
   document.getElementById('adefinir').innerHTML = adef.length
@@ -167,22 +185,30 @@ function render(rows){
     ? order.map(function(p){return '<div class="pf-row"><div class="pf-name">'+p+'</div><div class="pf-bar"><i style="width:'+Math.round(tally[p]/part*100)+'%"></i></div><div class="pf-val">'+tally[p]+' pers</div></div>';}).join('')+'<p class="foot">Total : '+part+' participants à venir.</p>'
     : '<p class="foot">—</p>';
 
-  renderCal(sessions);
+  renderCal();
 }
 
-function renderCal(sessions){
+function renderCal(){
   const host=document.getElementById('calendar');
-  if(!sessions.length){ host.innerHTML='<p class="foot">—</p>'; return; }
-  const first=sessions[0].date, y=first.getFullYear(), m=first.getMonth();
+  const sessions=LASTSESSIONS||[];
+  if(CAL_Y===null){ const base=sessions.length?sessions[0].date:new Date(); CAL_Y=base.getFullYear(); CAL_M=base.getMonth(); }
+  const y=CAL_Y, m=CAL_M;
   const byDay={}; sessions.forEach(function(s){ if(s.date.getFullYear()===y&&s.date.getMonth()===m){(byDay[s.date.getDate()]=byDay[s.date.getDate()]||[]).push(s);} });
   const startDow=(new Date(y,m,1).getDay()+6)%7, nd=new Date(y,m+1,0).getDate();
   const wd=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']; let html=wd.map(function(d){return '<div class="cal-wd">'+d+'</div>';}).join('');
   for(let i=0;i<startDow;i++) html+='<div class="cal-cell cal-empty"></div>';
+  let monthTot=0;
   for(let d=1;d<=nd;d++){ const list=(byDay[d]||[]).sort(function(a,b){return a.heure.localeCompare(b.heure);});
-    const chips=list.map(function(s){var rem=s.cap-s.tot,st=statusOf(rem);var lbl=s.atelier==='Latte Art'?'LA':(s.atelier==='Torréfaction'?'Torr':'Dég');return '<div class="cal-chip '+st.cls+'">'+s.heure+' '+lbl+' '+s.tot+'/'+s.cap+'</div>';}).join('');
+    const chips=list.map(function(s){var rem=s.cap-s.tot,st=statusOf(rem);var lbl=s.atelier==='Latte Art'?'LA':(s.atelier==='Torréfaction'?'Torr':'Dég');monthTot+=s.tot;return '<div class="cal-chip '+st.cls+'" title="'+s.atelier+' · '+pfNames(s.items)+'">'+s.heure+' '+lbl+' '+s.tot+'/'+s.cap+'</div>';}).join('');
     html+='<div class="cal-cell"><div class="cal-day">'+d+'</div>'+chips+'</div>'; }
-  host.innerHTML='<div style="font-weight:600;margin-bottom:8px">'+MONTH_FULL[m]+' '+y+'</div><div class="cal-grid">'+html+'</div>';
+  const head='<div class="calhead"><button class="navbtn" id="calPrev">‹</button>'
+    +'<div style="font-weight:600">'+MONTH_FULL[m]+' '+y+' <span class="src">· '+monthTot+' participant'+(monthTot>1?'s':'')+'</span></div>'
+    +'<button class="navbtn" id="calNext">›</button></div>';
+  host.innerHTML=head+'<div class="cal-grid">'+html+'</div>';
+  document.getElementById('calPrev').onclick=function(){ CAL_M--; if(CAL_M<0){CAL_M=11;CAL_Y--;} renderCal(); };
+  document.getElementById('calNext').onclick=function(){ CAL_M++; if(CAL_M>11){CAL_M=0;CAL_Y++;} renderCal(); };
 }
+function pfNames(items){ var set=[]; items.forEach(function(i){ if(i.plateforme && set.indexOf(i.plateforme)<0) set.push(i.plateforme); }); return set.join(', ')||'plateforme ?'; }
 
 load();
 </script>
