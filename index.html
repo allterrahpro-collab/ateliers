@@ -62,6 +62,10 @@ td.num{ text-align:center; font-variant-numeric:tabular-nums; }
     <p class="foot">Sessions complètes/surbookées et proches de la limite — referme l'atelier sur les plateformes indiquées.</p>
     <div id="pullList"></div></div>
 
+  <div class="section"><h2>Réservations à confirmer <span class="src" id="confCount"></span></h2>
+    <p class="foot">Demandes en attente (souvent des demandes Funbooker) — à valider sur la plateforme avant expiration. Non comptées dans les places tant qu'elles ne sont pas confirmées.</p>
+    <div id="aconfirmer"></div></div>
+
   <div class="section"><h2>Sessions à venir</h2><div id="sessions"></div></div>
 
   <div class="section"><h2>Réservations à définir (bons cadeaux)</h2>
@@ -167,6 +171,13 @@ function render(rows){
         return '<tr class="'+(done?'done':'')+'"><td class="num"><input type="checkbox" data-k="'+encodeURIComponent(k)+'"'+(done?' checked':'')+'></td><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td class="num">'+s.tot+'/'+s.cap+'</td><td><span class="pill '+st.cls+'">'+st.label+'</span></td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
     : '<p class="foot">Aucun atelier à retirer 🎉</p>';
   Array.prototype.forEach.call(document.querySelectorAll('#pullList input[type=checkbox]'), function(c){ c.addEventListener('change', function(){ toggleRetire(decodeURIComponent(c.getAttribute('data-k'))); }); });
+
+  var aconf=rows.filter(function(r){return r.statut==='à confirmer';}).sort(function(a,b){return (a.date?a.date.getTime():9e15)-(b.date?b.date.getTime():9e15);});
+  document.getElementById('confCount').textContent=aconf.length?('('+aconf.length+' en attente)'):'';
+  document.getElementById('aconfirmer').innerHTML = aconf.length
+    ? '<table><thead><tr><th>Date</th><th class="num">Heure</th><th>Atelier</th><th>Plateforme</th><th class="num">Places</th><th>Réf</th></tr></thead><tbody>'+
+      aconf.map(function(r){return '<tr><td>'+(r.date?fmt(r.date):'—')+'</td><td class="num">'+(r.heure||'—')+'</td><td><span class="tag">'+r.atelier+'</span></td><td>'+pfTags([r])+'</td><td class="num">'+r.places+'</td><td class="ref">'+refLabel(r)+'</td></tr>';}).join('')+'</tbody></table>'
+    : '<p class="foot">Aucune réservation en attente 🎉</p>';
 
   document.getElementById('sessions').innerHTML = sessions.length
     ? '<table><thead><tr><th>Date</th><th class="num">Heure</th><th>Atelier</th><th>Plateforme</th><th class="num">Places</th><th>Statut</th><th>Réservations</th></tr></thead><tbody>'+
