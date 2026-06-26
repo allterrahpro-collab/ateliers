@@ -179,7 +179,9 @@ function render(rows){
   const atRisk=sessions.filter(s=>s.cap-s.tot<=THRESHOLD);
   const atRiskOpen=atRisk.filter(s=>!RETIRE.has(skey(s)));
   const part=sessions.reduce((a,s)=>a+s.tot,0);
-  const adef=rows.filter(r=>/définir/.test(r.statut));
+  // Bon cadeau = ligne Shopify sans date (peu importe le libellé du statut écrit par Make), ou tout statut « à définir ».
+  const isGift=function(r){ return /définir/.test(r.statut) || (/shopify/i.test(r.plateforme) && !r.date && r.statut!=='annulé' && r.statut!=='à confirmer'); };
+  const adef=rows.filter(isGift);
   const adefOpen=adef.filter(r=>!isDone(r.effectue));
 
   // Sessions sous le minimum (annulation) — uniquement dans les 7 prochains jours, et au moins 1 inscrit ferme.
