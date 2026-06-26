@@ -59,7 +59,7 @@ td.num{ text-align:center; font-variant-numeric:tabular-nums; }
   <div id="alertBanner"></div>
 
   <div class="section"><h2>Annulation — sous le minimum <span class="src" id="cancelCount"></span></h2>
-    <p class="foot">On annule une session en dessous de : Dégustation 5, Latte Art 4, Torréfaction 2 personnes. Wecandoo annule automatiquement ses inscrits ; pour les autres plateformes (Shopify, Funbooker, Cap Adrénaline), il faut contacter les clients à la main.</p>
+    <p class="foot">Sessions <b>dans les 7 prochains jours</b> sous le seuil : Dégustation 5, Latte Art 4, Torréfaction 2 personnes. Wecandoo annule automatiquement ses inscrits ; pour les autres plateformes (Shopify, Funbooker, Cap Adrénaline), il faut contacter les clients à la main.</p>
     <div id="cancelList"></div></div>
 
   <div class="section"><h2>À retirer des plateformes <span class="src" id="pullCount"></span></h2>
@@ -182,8 +182,10 @@ function render(rows){
   const adef=rows.filter(r=>/définir/.test(r.statut));
   const adefOpen=adef.filter(r=>!isDone(r.effectue));
 
-  // Sessions sous le minimum (annulation). On ne flague que les sessions ayant au moins 1 inscrit ferme.
-  const cancels=sessions.map(function(s){ var min=minOf(s.atelier); var others=nonWecandooPlatforms(s);
+  // Sessions sous le minimum (annulation) — uniquement dans les 7 prochains jours, et au moins 1 inscrit ferme.
+  const cancelHorizon=new Date(today0); cancelHorizon.setDate(cancelHorizon.getDate()+7);
+  const cancels=sessions.filter(function(s){ return s.date<=cancelHorizon; })
+    .map(function(s){ var min=minOf(s.atelier); var others=nonWecandooPlatforms(s);
       return {s:s, min:min, others:others, below: s.tot>0 && s.tot<min}; })
     .filter(function(o){return o.below;})
     .sort(function(a,b){ return (b.others.length-a.others.length) || (a.s.date-b.s.date); });
