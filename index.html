@@ -11,7 +11,7 @@ body{ margin:0; background:#f7f5f2; color:#241f1a; font-family:-apple-system,Bli
 .wrap{ max-width:940px; margin:0 auto; padding:18px 16px 60px; }
 h1{ font-size:20px; margin:0 0 2px; }
 .sub{ color:#7a716a; font-size:12.5px; margin:0 0 16px; }
-.cards{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+.cards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px; }
 .card{ background:#fff; border:1px solid #e7e0d8; border-radius:12px; padding:12px 14px; }
 .card .n{ font-size:24px; font-weight:700; } .card .l{ font-size:11.5px; color:#7a716a; margin-top:2px; }
 .card.alert .n{ color:#c2410c; }
@@ -58,6 +58,10 @@ td.num{ text-align:center; font-variant-numeric:tabular-nums; }
   <div class="cards" id="cards"></div>
   <div id="alertBanner"></div>
 
+  <div class="section"><h2>Annulation — sous le minimum <span class="src" id="cancelCount"></span></h2>
+    <p class="foot">On annule une session en dessous de : Dégustation 5, Latte Art 4, Torréfaction 2 personnes. Wecandoo annule automatiquement ses inscrits ; pour les autres plateformes (Shopify, Funbooker, Cap Adrénaline), il faut contacter les clients à la main.</p>
+    <div id="cancelList"></div></div>
+
   <div class="section"><h2>À retirer des plateformes <span class="src" id="pullCount"></span></h2>
     <p class="foot">Sessions complètes/surbookées et proches de la limite — referme l'atelier sur les plateformes indiquées.</p>
     <div id="pullList"></div></div>
@@ -86,11 +90,16 @@ const TAB = "Untitled";
 // colonnes A,B,C,D,E,F,G,I,J = ID,Date,Heure,Atelier,Plateforme,NumRef,Places,Statut,Effectué (on saute H=Nom)
 const URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&sheet=" + encodeURIComponent(TAB) + "&tq=" + encodeURIComponent("select A,B,C,D,E,F,G,I,J");
 const CAP = { "Latte Art":8, "Dégustation":10, "Torréfaction":6 };
+// Minimum de participants pour maintenir une session (sinon annulée). Auto sur Wecandoo, manuel ailleurs.
+const MIN = { "Latte Art":4, "Dégustation":5, "Torréfaction":2 };
 const THRESHOLD = 2;
 let LASTROWS=[], LASTSESSIONS=[], CAL_Y=null, CAL_M=null;
 function skey(s){ return s.atelier+'|'+(s.date?s.date.getTime():'')+'|'+s.heure; }
 function pfClass(p){ if(/funbooker/i.test(p))return 'Funbooker'; if(/wecandoo/i.test(p))return 'Wecandoo'; if(/shopify/i.test(p))return 'Shopify'; if(/cap/i.test(p))return 'Cap'; return 'x'; }
 function pfTags(items){ var set=[]; items.forEach(function(i){ if(i.plateforme && set.indexOf(i.plateforme)<0) set.push(i.plateforme); }); if(!set.length) return '<span class="pf x">?</span>'; return set.map(function(p){return '<span class="pf '+pfClass(p)+'">'+p+'</span>';}).join(''); }
+function minOf(t){ return MIN[t]||0; }
+// plateformes hors-Wecandoo réellement comptées sur une session (= clients à prévenir à la main si annulation)
+function nonWecandooPlatforms(s){ var set=[]; s.items.forEach(function(i){ if(i.statut!=='à confirmer' && i.places>0 && !/wecandoo/i.test(i.plateforme) && set.indexOf(i.plateforme)<0) set.push(i.plateforme); }); return set; }
 function loadRetire(){ try{ return new Set(JSON.parse(localStorage.getItem('terrah_retire')||'[]')); }catch(e){ return new Set(); } }
 function saveRetire(set){ try{ localStorage.setItem('terrah_retire', JSON.stringify(Array.from(set))); }catch(e){} }
 function toggleRetire(k){ const s=loadRetire(); if(s.has(k)) s.delete(k); else s.add(k); saveRetire(s); render(LASTROWS); }
@@ -132,12 +141,32 @@ async function load(){
 
 function refLabel(r){ return r.plateforme + (r.numref?(' #'+r.numref):''); }
 
+// Dédoublonnage / supersede : pour une même réservation (plateforme + n° de réf), on ne garde que
+// la DERNIÈRE ligne du Sheet (la plus récente). Un "déplacé" remplace donc le créneau d'origine et
+// un "annulé" remplace le "confirmé". Sans n° de réf (ex. Wecandoo), on ne touche à rien.
+function dedupeRows(rows){
+  const lastIdx={};
+  rows.forEach(function(r,idx){
+    if(/définir/.test(r.statut)) return;
+    const ref=(r.numref||'').trim();
+    if(!ref) return;
+    lastIdx[(r.plateforme||'').toLowerCase()+'|'+ref.toLowerCase()]=idx;
+  });
+  return rows.filter(function(r,idx){
+    if(/définir/.test(r.statut)) return true;
+    const ref=(r.numref||'').trim();
+    if(!ref) return true;
+    return lastIdx[(r.plateforme||'').toLowerCase()+'|'+ref.toLowerCase()]===idx;
+  });
+}
+
 function render(rows){
+  rows = dedupeRows(rows);
   const today0=new Date(); today0.setHours(0,0,0,0);
   document.getElementById('genline').textContent='Mis à jour à l\'ouverture de la page · '+fmt(new Date());
 
   const map=new Map();
-  rows.filter(r=>r.date && r.heure && !/définir/.test(r.statut)).forEach(r=>{
+  rows.filter(r=>r.date && r.heure && !/définir/.test(r.statut) && r.statut!=='annulé').forEach(r=>{
     const k=r.atelier+'|'+r.date.getTime()+'|'+r.heure;
     if(!map.has(k)) map.set(k,{atelier:r.atelier,date:r.date,heure:r.heure,items:[],tot:0});
     const s=map.get(k); s.items.push(r); if(r.statut!=='à confirmer') s.tot+=r.places;
@@ -152,15 +181,34 @@ function render(rows){
   const part=sessions.reduce((a,s)=>a+s.tot,0);
   const adef=rows.filter(r=>/définir/.test(r.statut));
   const adefOpen=adef.filter(r=>!isDone(r.effectue));
+
+  // Sessions sous le minimum (annulation). On ne flague que les sessions ayant au moins 1 inscrit ferme.
+  const cancels=sessions.map(function(s){ var min=minOf(s.atelier); var others=nonWecandooPlatforms(s);
+      return {s:s, min:min, others:others, below: s.tot>0 && s.tot<min}; })
+    .filter(function(o){return o.below;})
+    .sort(function(a,b){ return (b.others.length-a.others.length) || (a.s.date-b.s.date); });
+  const manual=cancels.filter(function(o){return o.others.length>0;});
+
   document.getElementById('cards').innerHTML=
     '<div class="card"><div class="n">'+sessions.length+'</div><div class="l">sessions à venir</div></div>'+
     '<div class="card '+(atRiskOpen.length?'alert':'')+'"><div class="n">'+atRiskOpen.length+'</div><div class="l">à retirer</div></div>'+
     '<div class="card"><div class="n">'+part+'</div><div class="l">participants</div></div>'+
+    '<div class="card"><div class="n">'+cancels.length+'</div><div class="l">sous le minimum</div></div>'+
+    '<div class="card '+(manual.length?'alert':'')+'"><div class="n">'+manual.length+'</div><div class="l">à annuler à la main</div></div>'+
     '<div class="card"><div class="n">'+adefOpen.length+'</div><div class="l">à définir</div></div>';
 
   const ab=document.getElementById('alertBanner');
-  ab.className=atRiskOpen.length?'banner warn':'banner ok';
-  ab.innerHTML=atRiskOpen.length?('<b>⚠️ '+atRiskOpen.length+' atelier(s) à retirer des plateformes</b> — coche « Validé » une fois fait.'):'<b>✅ Tout est à jour.</b>';
+  if(manual.length){ ab.className='banner warn'; ab.innerHTML='<b>⚠️ '+manual.length+' session(s) sous le minimum avec des inscrits hors Wecandoo</b> — à annuler / contacter à la main (voir « Annulation — sous le minimum »).'; }
+  else if(atRiskOpen.length){ ab.className='banner warn'; ab.innerHTML='<b>⚠️ '+atRiskOpen.length+' atelier(s) à retirer des plateformes</b> — coche « Validé » une fois fait.'; }
+  else { ab.className='banner ok'; ab.innerHTML='<b>✅ Tout est à jour.</b>'; }
+
+  // ----- Annulation : sous le minimum -----
+  document.getElementById('cancelCount').textContent = cancels.length?('('+cancels.length+(manual.length?(' · '+manual.length+' à la main'):' · auto')+')'):'';
+  document.getElementById('cancelList').innerHTML = cancels.length
+    ? '<table><thead><tr><th>Créneau</th><th>Atelier</th><th class="num">Inscrits</th><th>Action</th><th>Réservations</th></tr></thead><tbody>'+
+      cancels.map(function(o){ var s=o.s; var act=o.others.length?('<span class="pill full">À contacter : '+o.others.join(', ')+'</span>'):'<span class="pill ok">Auto (Wecandoo)</span>'; var refs=s.items.map(refLabel).join(', ');
+        return '<tr><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td class="num">'+s.tot+'/'+o.min+' min</td><td>'+act+'</td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
+    : '<p class="foot">Aucune session sous le minimum 🎉</p>';
 
   const pulls=sessions.map(s=>({s,rem:s.cap-s.tot})).filter(o=>o.rem<=THRESHOLD)
     .sort(function(a,b){var ra=RETIRE.has(skey(a.s)),rb=RETIRE.has(skey(b.s)); if(ra!==rb) return ra?1:-1; return a.rem-b.rem;});
