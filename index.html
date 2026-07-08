@@ -11,18 +11,12 @@ body{ margin:0; background:#f7f5f2; color:#241f1a; font-family:-apple-system,Bli
 .wrap{ max-width:940px; margin:0 auto; padding:18px 16px 60px; }
 h1{ font-size:20px; margin:0 0 2px; }
 .sub{ color:#7a716a; font-size:12.5px; margin:0 0 16px; }
-.cards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px; }
+.cards{ display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px; }
 .card{ background:#fff; border:1px solid #e7e0d8; border-radius:12px; padding:12px 14px; }
 .card .n{ font-size:24px; font-weight:700; } .card .l{ font-size:11.5px; color:#7a716a; margin-top:2px; }
 .card.alert .n{ color:#c2410c; }
 .section{ background:#fff; border:1px solid #e7e0d8; border-radius:12px; padding:14px 16px; margin-bottom:16px; }
 .section h2{ font-size:15px; margin:0 0 10px; }
-.todo.section{ border-color:#f0c9a0; background:#fffaf4; }
-.todo-item{ display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid #f4c89a; background:#fff; border-radius:10px; margin-bottom:8px; text-decoration:none; color:#8a4b12; font-weight:600; font-size:13.5px; }
-.todo-item:last-child{ margin-bottom:0; }
-.todo-item:hover{ background:#fdeeda; }
-.todo-n{ display:inline-flex; align-items:center; justify-content:center; min-width:24px; height:24px; padding:0 7px; border-radius:999px; background:#c2410c; color:#fff; font-size:12.5px; font-weight:700; }
-.todo-arrow{ margin-left:auto; color:#c79a6a; font-size:16px; }
 .banner{ border-radius:12px; padding:12px 14px; margin-bottom:16px; font-size:13.5px; }
 .banner.warn{ background:#fff4e8; border:1px solid #f4c89a; color:#8a4b12; }
 .banner.ok{ background:#eef7ee; border:1px solid #bfe0bf; color:#2f6b34; }
@@ -61,34 +55,32 @@ td.num{ text-align:center; font-variant-numeric:tabular-nums; }
   <p class="sub" id="genline">Chargement des données…</p>
 
   <div id="status"></div>
-
-  <div class="section todo"><h2>À faire maintenant</h2><div id="todo"></div></div>
-
   <div class="cards" id="cards"></div>
+  <div id="alertBanner"></div>
 
-  <div class="section" id="sec-annul"><h2>Annulation — sous le minimum <span class="src" id="cancelCount"></span></h2>
-    <p class="foot">Sessions <b>dans les 7 prochains jours</b> sous le seuil : Dégustation 5, Latte Art 4, Torréfaction 2 personnes. Wecandoo annule automatiquement ses inscrits ; pour les autres plateformes (Shopify, Funbooker, Cap Adrénaline), il faut contacter les clients à la main.</p>
-    <div id="cancelList"></div></div>
-
-  <div class="section" id="sec-retirer"><h2>À retirer des plateformes <span class="src" id="pullCount"></span></h2>
-    <p class="foot">Sessions complètes/surbookées et proches de la limite — referme l'atelier sur les plateformes indiquées. (Case « Validé » mémorisée sur cet appareil.)</p>
+  <div class="section"><h2>À retirer des plateformes <span class="src" id="pullCount"></span></h2>
+    <p class="foot">Sessions complètes/surbookées et proches de la limite — referme l'atelier sur les plateformes indiquées.</p>
     <div id="pullList"></div></div>
 
-  <div class="section" id="sec-confirmer"><h2>Réservations à confirmer <span class="src" id="confCount"></span></h2>
+  <div class="section"><h2>À annuler <span class="src" id="cancelCount"></span></h2>
+    <p class="foot">Ateliers dans moins de 7 jours dont le nombre de participants est sous le minimum requis (Latte Art&nbsp;4, Dégustation&nbsp;5, Torréfaction&nbsp;2).</p>
+    <div id="cancelList"></div></div>
+
+  <div class="section"><h2>Réservations à confirmer <span class="src" id="confCount"></span></h2>
     <p class="foot">Demandes en attente (souvent des demandes Funbooker) — à valider sur la plateforme avant expiration. Non comptées dans les places tant qu'elles ne sont pas confirmées.</p>
     <div id="aconfirmer"></div></div>
 
   <div class="section"><h2>Sessions à venir</h2><div id="sessions"></div></div>
 
-  <div class="section" id="sec-cadeaux"><h2>Bons cadeaux à envoyer <span class="src" id="giftCount"></span></h2>
-    <p class="foot">Coche « Envoyé » quand le bon cadeau a été envoyé au client (mémorisé sur cet appareil). Le ✓ tient compte aussi de la colonne « Effectué » du Google Sheet.</p>
+  <div class="section"><h2>Réservations à définir (bons cadeaux)</h2>
+    <p class="foot">Coche « Effectué » directement dans le Google Sheet une fois l'atelier réalisé.</p>
     <div id="adefinir"></div></div>
 
   <div class="section"><h2>Par plateforme</h2><div id="byPlatform"></div></div>
 
   <div class="section"><h2>Calendrier</h2><div id="calendar"></div></div>
 
-  <p class="foot">Données lues en direct depuis le Google Sheet (rempli automatiquement). Identifiants : Plateforme + n° de réservation. Aucun nom client n'est affiché. Les cases cochées sont mémorisées sur cet appareil.</p>
+  <p class="foot">Données lues en direct depuis le Google Sheet (rempli automatiquement). Identifiants : Plateforme + n° de réservation. Aucun nom client n'est affiché.</p>
 </div>
 
 <script>
@@ -98,25 +90,17 @@ const TAB = "Untitled";
 // colonnes A,B,C,D,E,F,G,I,J = ID,Date,Heure,Atelier,Plateforme,NumRef,Places,Statut,Effectué (on saute H=Nom)
 const URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&sheet=" + encodeURIComponent(TAB) + "&tq=" + encodeURIComponent("select A,B,C,D,E,F,G,I,J");
 const CAP = { "Latte Art":8, "Dégustation":10, "Torréfaction":6 };
-// Minimum de participants pour maintenir une session (sinon annulée). Auto sur Wecandoo, manuel ailleurs.
 const MIN = { "Latte Art":4, "Dégustation":5, "Torréfaction":2 };
 const THRESHOLD = 2;
+const CANCEL_DAYS = 7;
+function minOf(t){ return MIN[t]||0; }
 let LASTROWS=[], LASTSESSIONS=[], CAL_Y=null, CAL_M=null;
 function skey(s){ return s.atelier+'|'+(s.date?s.date.getTime():'')+'|'+s.heure; }
 function pfClass(p){ if(/funbooker/i.test(p))return 'Funbooker'; if(/wecandoo/i.test(p))return 'Wecandoo'; if(/shopify/i.test(p))return 'Shopify'; if(/cap/i.test(p))return 'Cap'; return 'x'; }
 function pfTags(items){ var set=[]; items.forEach(function(i){ if(i.plateforme && set.indexOf(i.plateforme)<0) set.push(i.plateforme); }); if(!set.length) return '<span class="pf x">?</span>'; return set.map(function(p){return '<span class="pf '+pfClass(p)+'">'+p+'</span>';}).join(''); }
-function minOf(t){ return MIN[t]||0; }
-// plateformes hors-Wecandoo réellement comptées sur une session (= clients à prévenir à la main si annulation)
-function nonWecandooPlatforms(s){ var set=[]; s.items.forEach(function(i){ if(i.statut!=='à confirmer' && i.places>0 && !/wecandoo/i.test(i.plateforme) && set.indexOf(i.plateforme)<0) set.push(i.plateforme); }); return set; }
 function loadRetire(){ try{ return new Set(JSON.parse(localStorage.getItem('terrah_retire')||'[]')); }catch(e){ return new Set(); } }
 function saveRetire(set){ try{ localStorage.setItem('terrah_retire', JSON.stringify(Array.from(set))); }catch(e){} }
 function toggleRetire(k){ const s=loadRetire(); if(s.has(k)) s.delete(k); else s.add(k); saveRetire(s); render(LASTROWS); }
-// Bons cadeaux envoyés : coché sur le site, mémorisé sur cet appareil (le Sheet est en lecture seule).
-function loadSent(){ try{ return new Set(JSON.parse(localStorage.getItem('terrah_gift_sent')||'[]')); }catch(e){ return new Set(); } }
-function saveSent(set){ try{ localStorage.setItem('terrah_gift_sent', JSON.stringify(Array.from(set))); }catch(e){} }
-function giftKey(r){ return (r.id && String(r.id).trim()) ? String(r.id).trim() : (r.plateforme+'#'+r.numref); }
-function giftDone(r){ return isDone(r.effectue) || loadSent().has(giftKey(r)); }
-function toggleSent(k){ const s=loadSent(); if(s.has(k)) s.delete(k); else s.add(k); saveSent(s); render(LASTROWS); }
 
 const MONTH_NAMES=["jan","fév","mar","avr","mai","juin","juil","aoû","sep","oct","nov","déc"];
 const MONTH_FULL=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
@@ -126,7 +110,7 @@ function fmt(dt){ return DAY_NAMES[dt.getDay()]+' '+dt.getDate()+' '+MONTH_NAMES
 function capOf(t){ return CAP[t]||10; }
 function statusOf(rem){ if(rem<=0) return {cls:'full',label: rem<0?('Surbooké ('+(-rem)+')'):'Complet'}; if(rem<=THRESHOLD) return {cls:'warn',label: rem+' restante'+(rem>1?'s':'')}; return {cls:'ok',label: rem+' libres'}; }
 function parseDate(s){ if(!s) return null; let m=String(s).match(/Date\((\d+),(\d+),(\d+)/); if(m) return new Date(+m[1],+m[2],+m[3]); m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})/); if(m) return new Date(+m[1],+m[2]-1,+m[3]); return null; }
-function parseTime(s){ if(!s) return ''; let m=String(s).match(/(\d{1,2})[:hH](\d{2})/); if(m) return pad(+m[1])+':'+m[2]; m=String(s).match(/Date\(\d+,\d+,\d+,(\d+),(\d+)/); if(m) return pad(+m[1])+':'+pad(+m[2]); return ''; }
+function parseTime(s){ if(!s) return ''; let m=String(s).match(/(\d{1,2}):(\d{2})/); if(m) return pad(+m[1])+':'+m[2]; m=String(s).match(/Date\(\d+,\d+,\d+,(\d+),(\d+)/); if(m) return pad(+m[1])+':'+pad(+m[2]); return ''; }
 function isDone(v){ v=(v||'').toString().toLowerCase(); return v==='true'||v==='oui'||v==='1'||v==='x'||v==='vrai'; }
 
 function parseCSV(text){
@@ -141,7 +125,7 @@ function parseCSV(text){
 
 async function load(){
   let text;
-  try{ const r=await fetch(URL+'&_cb='+Date.now()); text=await r.text(); }
+  try{ const r=await fetch(URL); text=await r.text(); }
   catch(e){ document.getElementById('status').innerHTML='<div class="banner err">Impossible de charger le Google Sheet. Vérifie qu\'il est partagé en « Tous les utilisateurs disposant du lien : Lecteur ».</div>'; return; }
   const raw=parseCSV(text);
   if(!raw.length){ document.getElementById('status').innerHTML='<div class="banner err">Aucune donnée. Le Sheet est-il partagé en lecture publique ?</div>'; return; }
@@ -155,32 +139,12 @@ async function load(){
 
 function refLabel(r){ return r.plateforme + (r.numref?(' #'+r.numref):''); }
 
-// Dédoublonnage / supersede : pour une même réservation (plateforme + n° de réf), on ne garde que
-// la DERNIÈRE ligne du Sheet (la plus récente). Un "déplacé" remplace donc le créneau d'origine et
-// un "annulé" remplace le "confirmé". Sans n° de réf (ex. Wecandoo), on ne touche à rien.
-function dedupeRows(rows){
-  const lastIdx={};
-  rows.forEach(function(r,idx){
-    if(/définir/.test(r.statut)) return;
-    const ref=(r.numref||'').trim();
-    if(!ref) return;
-    lastIdx[(r.plateforme||'').toLowerCase()+'|'+ref.toLowerCase()]=idx;
-  });
-  return rows.filter(function(r,idx){
-    if(/définir/.test(r.statut)) return true;
-    const ref=(r.numref||'').trim();
-    if(!ref) return true;
-    return lastIdx[(r.plateforme||'').toLowerCase()+'|'+ref.toLowerCase()]===idx;
-  });
-}
-
 function render(rows){
-  rows = dedupeRows(rows);
   const today0=new Date(); today0.setHours(0,0,0,0);
   document.getElementById('genline').textContent='Mis à jour à l\'ouverture de la page · '+fmt(new Date());
 
   const map=new Map();
-  rows.filter(r=>r.date && r.heure && !/définir/.test(r.statut) && r.statut!=='annulé').forEach(r=>{
+  rows.filter(r=>r.date && r.heure && !/définir/.test(r.statut)).forEach(r=>{
     const k=r.atelier+'|'+r.date.getTime()+'|'+r.heure;
     if(!map.has(k)) map.set(k,{atelier:r.atelier,date:r.date,heure:r.heure,items:[],tot:0});
     const s=map.get(k); s.items.push(r); if(r.statut!=='à confirmer') s.tot+=r.places;
@@ -193,49 +157,24 @@ function render(rows){
   const atRisk=sessions.filter(s=>s.cap-s.tot<=THRESHOLD);
   const atRiskOpen=atRisk.filter(s=>!RETIRE.has(skey(s)));
   const part=sessions.reduce((a,s)=>a+s.tot,0);
-
-  // Bon cadeau = ligne Shopify sans date (peu importe le libellé du statut écrit par Make), ou tout statut « à définir ».
-  const isGift=function(r){ return /définir/.test(r.statut) || (/shopify/i.test(r.plateforme) && !r.date && r.statut!=='annulé' && r.statut!=='à confirmer'); };
-  const adef=rows.filter(isGift);
-  const adefOpen=adef.filter(function(r){return !giftDone(r);});
-
-  // Sessions sous le minimum (annulation) — uniquement dans les 7 prochains jours, et au moins 1 inscrit ferme.
-  const cancelHorizon=new Date(today0); cancelHorizon.setDate(cancelHorizon.getDate()+7);
-  const cancels=sessions.filter(function(s){ return s.date<=cancelHorizon; })
-    .map(function(s){ var min=minOf(s.atelier); var others=nonWecandooPlatforms(s);
-      return {s:s, min:min, others:others, below: s.tot>0 && s.tot<min}; })
-    .filter(function(o){return o.below;})
-    .sort(function(a,b){ return (b.others.length-a.others.length) || (a.s.date-b.s.date); });
-  const manual=cancels.filter(function(o){return o.others.length>0;});
-
-  var aconf=rows.filter(function(r){return r.statut==='à confirmer';}).sort(function(a,b){return (a.date?a.date.getTime():9e15)-(b.date?b.date.getTime():9e15);});
-
+  const adef=rows.filter(r=>/définir/.test(r.statut));
+  const adefOpen=adef.filter(r=>!isDone(r.effectue));
+  const soon=new Date(today0); soon.setDate(soon.getDate()+CANCEL_DAYS);
+  const toCancel=sessions.filter(function(s){return s.date < soon && s.tot < minOf(s.atelier);})
+    .sort(function(a,b){return a.date-b.date||a.heure.localeCompare(b.heure);});
   document.getElementById('cards').innerHTML=
     '<div class="card"><div class="n">'+sessions.length+'</div><div class="l">sessions à venir</div></div>'+
+    '<div class="card '+(toCancel.length?'alert':'')+'"><div class="n">'+toCancel.length+'</div><div class="l">à annuler</div></div>'+
     '<div class="card '+(atRiskOpen.length?'alert':'')+'"><div class="n">'+atRiskOpen.length+'</div><div class="l">à retirer</div></div>'+
     '<div class="card"><div class="n">'+part+'</div><div class="l">participants</div></div>'+
-    '<div class="card"><div class="n">'+cancels.length+'</div><div class="l">sous le minimum</div></div>'+
-    '<div class="card '+(manual.length?'alert':'')+'"><div class="n">'+manual.length+'</div><div class="l">à annuler à la main</div></div>'+
-    '<div class="card"><div class="n">'+adefOpen.length+'</div><div class="l">bons cadeaux à envoyer</div></div>';
+    '<div class="card"><div class="n">'+adefOpen.length+'</div><div class="l">à définir</div></div>';
 
-  // ----- Récap « À faire maintenant » -----
-  var todo=[
-    {n:atRiskOpen.length, label:'Retirer des ateliers des plateformes', a:'sec-retirer'},
-    {n:manual.length, label:'Prévenir des annulations (clients hors Wecandoo)', a:'sec-annul'},
-    {n:aconf.length, label:'Confirmer des réservations en attente', a:'sec-confirmer'},
-    {n:adefOpen.length, label:'Envoyer des bons cadeaux', a:'sec-cadeaux'}
-  ].filter(function(t){return t.n>0;});
-  document.getElementById('todo').innerHTML = todo.length
-    ? todo.map(function(t){return '<a class="todo-item" href="#'+t.a+'"><span class="todo-n">'+t.n+'</span><span>'+t.label+'</span><span class="todo-arrow">›</span></a>';}).join('')
-    : '<p class="foot" style="margin:0">✅ Rien à faire dans l\'immédiat.</p>';
-
-  // ----- Annulation : sous le minimum -----
-  document.getElementById('cancelCount').textContent = cancels.length?('('+cancels.length+(manual.length?(' · '+manual.length+' à la main'):' · auto')+')'):'';
-  document.getElementById('cancelList').innerHTML = cancels.length
-    ? '<table><thead><tr><th>Créneau</th><th>Atelier</th><th class="num">Inscrits</th><th>Action</th><th>Réservations</th></tr></thead><tbody>'+
-      cancels.map(function(o){ var s=o.s; var act=o.others.length?('<span class="pill full">À contacter : '+o.others.join(', ')+'</span>'):'<span class="pill ok">Auto (Wecandoo)</span>'; var refs=s.items.map(refLabel).join(', ');
-        return '<tr><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td class="num">'+s.tot+'/'+o.min+' min</td><td>'+act+'</td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
-    : '<p class="foot">Aucune session sous le minimum 🎉</p>';
+  const ab=document.getElementById('alertBanner');
+  var alerts=[];
+  if(toCancel.length) alerts.push('🚨 <b>'+toCancel.length+' atelier(s) à annuler</b> (sous le minimum, &lt; 7 jours)');
+  if(atRiskOpen.length) alerts.push('⚠️ <b>'+atRiskOpen.length+' atelier(s) à retirer des plateformes</b>');
+  ab.className=(toCancel.length?'banner err':(atRiskOpen.length?'banner warn':'banner ok'));
+  ab.innerHTML=alerts.length?alerts.join(' · '):'<b>✅ Tout est à jour.</b>';
 
   const pulls=sessions.map(s=>({s,rem:s.cap-s.tot})).filter(o=>o.rem<=THRESHOLD)
     .sort(function(a,b){var ra=RETIRE.has(skey(a.s)),rb=RETIRE.has(skey(b.s)); if(ra!==rb) return ra?1:-1; return a.rem-b.rem;});
@@ -247,6 +186,14 @@ function render(rows){
     : '<p class="foot">Aucun atelier à retirer 🎉</p>';
   Array.prototype.forEach.call(document.querySelectorAll('#pullList input[type=checkbox]'), function(c){ c.addEventListener('change', function(){ toggleRetire(decodeURIComponent(c.getAttribute('data-k'))); }); });
 
+  document.getElementById('cancelCount').textContent=toCancel.length?('('+toCancel.length+')'):'';
+  document.getElementById('cancelList').innerHTML = toCancel.length
+    ? '<table><thead><tr><th>Créneau</th><th>Atelier</th><th>Plateforme</th><th class="num">Places</th><th class="num">Min</th><th>Réservations</th></tr></thead><tbody>'+
+      toCancel.map(function(s){var refs=s.items.map(refLabel).join(', ')||'—';
+        return '<tr><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td>'+pfTags(s.items)+'</td><td class="num"><span class="pill full">'+s.tot+'/'+s.cap+'</span></td><td class="num">'+minOf(s.atelier)+'</td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
+    : '<p class="foot">Aucun atelier à annuler 🎉</p>';
+
+  var aconf=rows.filter(function(r){return r.statut==='à confirmer';}).sort(function(a,b){return (a.date?a.date.getTime():9e15)-(b.date?b.date.getTime():9e15);});
   document.getElementById('confCount').textContent=aconf.length?('('+aconf.length+' en attente)'):'';
   document.getElementById('aconfirmer').innerHTML = aconf.length
     ? '<table><thead><tr><th>Date</th><th class="num">Heure</th><th>Atelier</th><th>Plateforme</th><th class="num">Places</th><th>Réf</th></tr></thead><tbody>'+
@@ -259,13 +206,10 @@ function render(rows){
         return '<tr><td>'+fmt(s.date)+'</td><td class="num">'+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td>'+pfTags(s.items)+'</td><td class="num">'+s.tot+'/'+s.cap+'</td><td><span class="pill '+st.cls+'">'+st.label+'</span></td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
     : '<p class="foot">Aucune session à venir.</p>';
 
-  var adefSorted=adef.slice().sort(function(a,b){var da=giftDone(a),db=giftDone(b); if(da!==db) return da?1:-1; return refLabel(a).localeCompare(refLabel(b));});
-  document.getElementById('giftCount').textContent = adef.length?('('+adefOpen.length+' à envoyer)'):'';
   document.getElementById('adefinir').innerHTML = adef.length
-    ? '<table><thead><tr><th>Envoyé</th><th>Réf</th><th>Atelier</th><th class="num">Places</th></tr></thead><tbody>'+
-      adefSorted.map(function(r){var d=giftDone(r);var k=encodeURIComponent(giftKey(r));return '<tr class="'+(d?'done':'')+'"><td class="num"><input type="checkbox" data-g="'+k+'"'+(d?' checked':'')+'></td><td class="ref">'+refLabel(r)+'</td><td><span class="tag">'+r.atelier+'</span></td><td class="num">'+r.places+'</td></tr>';}).join('')+'</tbody></table>'
-    : '<p class="foot">Aucun bon cadeau à envoyer.</p>';
-  Array.prototype.forEach.call(document.querySelectorAll('#adefinir input[type=checkbox]'), function(c){ c.addEventListener('change', function(){ toggleSent(decodeURIComponent(c.getAttribute('data-g'))); }); });
+    ? '<table><thead><tr><th>Réf</th><th>Atelier</th><th class="num">Places</th><th class="num">Effectué</th></tr></thead><tbody>'+
+      adef.map(function(r){var d=isDone(r.effectue);return '<tr class="'+(d?'done':'')+'"><td class="ref">'+refLabel(r)+'</td><td><span class="tag">'+r.atelier+'</span></td><td class="num">'+r.places+'</td><td class="num">'+(d?'✓':'')+'</td></tr>';}).join('')+'</tbody></table>'
+    : '<p class="foot">Aucune réservation à définir.</p>';
 
   var tally={}; sessions.forEach(function(s){s.items.forEach(function(i){tally[i.plateforme]=(tally[i.plateforme]||0)+i.places;});});
   var order=Object.keys(tally).sort(function(a,b){return tally[b]-tally[a];});
@@ -279,7 +223,7 @@ function render(rows){
 function renderCal(){
   const host=document.getElementById('calendar');
   const sessions=LASTSESSIONS||[];
-  if(CAL_Y===null){ const base=sessions.length?sessions[0].date:new Date(); CAL_Y=base.getFullYear(); CAL_M=base.getMonth(); }
+  if(CAL_Y===null){ const base=new Date(); CAL_Y=base.getFullYear(); CAL_M=base.getMonth(); }
   const y=CAL_Y, m=CAL_M;
   const byDay={}; sessions.forEach(function(s){ if(s.date.getFullYear()===y&&s.date.getMonth()===m){(byDay[s.date.getDate()]=byDay[s.date.getDate()]||[]).push(s);} });
   const startDow=(new Date(y,m,1).getDay()+6)%7, nd=new Date(y,m+1,0).getDate();
