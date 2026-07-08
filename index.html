@@ -151,7 +151,7 @@ function render(rows){
   });
   const allSessions=[...map.values()].map(s=>{ s.cap=capOf(s.atelier); return s; }).sort((a,b)=>a.date-b.date||a.heure.localeCompare(b.heure));
   const sessions=allSessions.filter(s=>s.date>=today0);
-  LASTSESSIONS=allSessions;
+  LASTSESSIONS=sessions;
 
   const RETIRE=loadRetire();
   const atRisk=sessions.filter(s=>s.cap-s.tot<=THRESHOLD);
@@ -193,7 +193,7 @@ function render(rows){
         return '<tr><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td>'+pfTags(s.items)+'</td><td class="num"><span class="pill full">'+s.tot+'/'+s.cap+'</span></td><td class="num">'+minOf(s.atelier)+'</td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
     : '<p class="foot">Aucun atelier à annuler 🎉</p>';
 
-  var aconf=rows.filter(function(r){return r.statut==='à confirmer';}).sort(function(a,b){return (a.date?a.date.getTime():9e15)-(b.date?b.date.getTime():9e15);});
+  var aconf=rows.filter(function(r){return r.statut==='à confirmer' && (!r.date || r.date>=today0);}).sort(function(a,b){return (a.date?a.date.getTime():9e15)-(b.date?b.date.getTime():9e15);});
   document.getElementById('confCount').textContent=aconf.length?('('+aconf.length+' en attente)'):'';
   document.getElementById('aconfirmer').innerHTML = aconf.length
     ? '<table><thead><tr><th>Date</th><th class="num">Heure</th><th>Atelier</th><th>Plateforme</th><th class="num">Places</th><th>Réf</th></tr></thead><tbody>'+
