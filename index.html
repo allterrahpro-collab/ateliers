@@ -59,11 +59,11 @@ td.num{ text-align:center; font-variant-numeric:tabular-nums; }
   <div id="alertBanner"></div>
 
   <div class="section"><h2>À retirer des plateformes <span class="src" id="pullCount"></span></h2>
-    <p class="foot">Sessions complètes/surbookées et proches de la limite — referme l'atelier sur les plateformes indiquées.</p>
+    <p class="foot">Sessions complètes/surbookées et proches de la limite — referme l'atelier sur les plateformes indiquées. Coche « Validé » une fois fait.</p>
     <div id="pullList"></div></div>
 
   <div class="section"><h2>À annuler <span class="src" id="cancelCount"></span></h2>
-    <p class="foot">Ateliers dans moins de 7 jours dont le nombre de participants est sous le minimum requis (Latte Art&nbsp;4, Dégustation&nbsp;5, Torréfaction&nbsp;2).</p>
+    <p class="foot">Ateliers dans moins de 7 jours dont le nombre de participants est sous le minimum requis (Latte Art&nbsp;4, Dégustation&nbsp;5, Torréfaction&nbsp;2). Coche « Fait » une fois traité.</p>
     <div id="cancelList"></div></div>
 
   <div class="section"><h2>Réservations à confirmer <span class="src" id="confCount"></span></h2>
@@ -101,6 +101,9 @@ function pfTags(items){ var set=[]; items.forEach(function(i){ if(i.plateforme &
 function loadRetire(){ try{ return new Set(JSON.parse(localStorage.getItem('terrah_retire')||'[]')); }catch(e){ return new Set(); } }
 function saveRetire(set){ try{ localStorage.setItem('terrah_retire', JSON.stringify(Array.from(set))); }catch(e){} }
 function toggleRetire(k){ const s=loadRetire(); if(s.has(k)) s.delete(k); else s.add(k); saveRetire(s); render(LASTROWS); }
+function loadDone(){ try{ return new Set(JSON.parse(localStorage.getItem('terrah_cancel_done')||'[]')); }catch(e){ return new Set(); } }
+function saveDone(set){ try{ localStorage.setItem('terrah_cancel_done', JSON.stringify(Array.from(set))); }catch(e){} }
+function toggleDone(k){ const s=loadDone(); if(s.has(k)) s.delete(k); else s.add(k); saveDone(s); render(LASTROWS); }
 
 const MONTH_NAMES=["jan","fév","mar","avr","mai","juin","juil","aoû","sep","oct","nov","déc"];
 const MONTH_FULL=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
@@ -159,21 +162,24 @@ function render(rows){
   const part=sessions.reduce((a,s)=>a+s.tot,0);
   const adef=rows.filter(r=>/définir/.test(r.statut));
   const adefOpen=adef.filter(r=>!isDone(r.effectue));
+  const DONE=loadDone();
   const soon=new Date(today0); soon.setDate(soon.getDate()+CANCEL_DAYS);
   const toCancel=sessions.filter(function(s){return s.date < soon && s.tot < minOf(s.atelier);})
-    .sort(function(a,b){return a.date-b.date||a.heure.localeCompare(b.heure);});
+    .sort(function(a,b){var da=DONE.has(skey(a)),db=DONE.has(skey(b)); if(da!==db) return da?1:-1; return a.date-b.date||a.heure.localeCompare(b.heure);});
+  const toCancelOpen=toCancel.filter(function(s){return !DONE.has(skey(s));});
+
   document.getElementById('cards').innerHTML=
     '<div class="card"><div class="n">'+sessions.length+'</div><div class="l">sessions à venir</div></div>'+
-    '<div class="card '+(toCancel.length?'alert':'')+'"><div class="n">'+toCancel.length+'</div><div class="l">à annuler</div></div>'+
+    '<div class="card '+(toCancelOpen.length?'alert':'')+'"><div class="n">'+toCancelOpen.length+'</div><div class="l">à annuler</div></div>'+
     '<div class="card '+(atRiskOpen.length?'alert':'')+'"><div class="n">'+atRiskOpen.length+'</div><div class="l">à retirer</div></div>'+
     '<div class="card"><div class="n">'+part+'</div><div class="l">participants</div></div>'+
     '<div class="card"><div class="n">'+adefOpen.length+'</div><div class="l">à définir</div></div>';
 
   const ab=document.getElementById('alertBanner');
   var alerts=[];
-  if(toCancel.length) alerts.push('🚨 <b>'+toCancel.length+' atelier(s) à annuler</b> (sous le minimum, &lt; 7 jours)');
+  if(toCancelOpen.length) alerts.push('🚨 <b>'+toCancelOpen.length+' atelier(s) à annuler</b> (sous le minimum, &lt; 7 jours)');
   if(atRiskOpen.length) alerts.push('⚠️ <b>'+atRiskOpen.length+' atelier(s) à retirer des plateformes</b>');
-  ab.className=(toCancel.length?'banner err':(atRiskOpen.length?'banner warn':'banner ok'));
+  ab.className=(toCancelOpen.length?'banner err':(atRiskOpen.length?'banner warn':'banner ok'));
   ab.innerHTML=alerts.length?alerts.join(' · '):'<b>✅ Tout est à jour.</b>';
 
   const pulls=sessions.map(s=>({s,rem:s.cap-s.tot})).filter(o=>o.rem<=THRESHOLD)
@@ -186,12 +192,13 @@ function render(rows){
     : '<p class="foot">Aucun atelier à retirer 🎉</p>';
   Array.prototype.forEach.call(document.querySelectorAll('#pullList input[type=checkbox]'), function(c){ c.addEventListener('change', function(){ toggleRetire(decodeURIComponent(c.getAttribute('data-k'))); }); });
 
-  document.getElementById('cancelCount').textContent=toCancel.length?('('+toCancel.length+')'):'';
+  document.getElementById('cancelCount').textContent=toCancelOpen.length?('('+toCancelOpen.length+' à traiter)'):'';
   document.getElementById('cancelList').innerHTML = toCancel.length
-    ? '<table><thead><tr><th>Créneau</th><th>Atelier</th><th>Plateforme</th><th class="num">Places</th><th class="num">Min</th><th>Réservations</th></tr></thead><tbody>'+
-      toCancel.map(function(s){var refs=s.items.map(refLabel).join(', ')||'—';
-        return '<tr><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td>'+pfTags(s.items)+'</td><td class="num"><span class="pill full">'+s.tot+'/'+s.cap+'</span></td><td class="num">'+minOf(s.atelier)+'</td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
+    ? '<table><thead><tr><th>Fait</th><th>Créneau</th><th>Atelier</th><th>Plateforme</th><th class="num">Places</th><th class="num">Min</th><th>Réservations</th></tr></thead><tbody>'+
+      toCancel.map(function(s){var refs=s.items.map(refLabel).join(', ')||'—';var k=skey(s);var done=DONE.has(k);
+        return '<tr class="'+(done?'done':'')+'"><td class="num"><input type="checkbox" data-c="'+encodeURIComponent(k)+'"'+(done?' checked':'')+'></td><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td>'+pfTags(s.items)+'</td><td class="num"><span class="pill full">'+s.tot+'/'+s.cap+'</span></td><td class="num">'+minOf(s.atelier)+'</td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
     : '<p class="foot">Aucun atelier à annuler 🎉</p>';
+  Array.prototype.forEach.call(document.querySelectorAll('#cancelList input[type=checkbox]'), function(c){ c.addEventListener('change', function(){ toggleDone(decodeURIComponent(c.getAttribute('data-c'))); }); });
 
   var aconf=rows.filter(function(r){return r.statut==='à confirmer' && (!r.date || r.date>=today0);}).sort(function(a,b){return (a.date?a.date.getTime():9e15)-(b.date?b.date.getTime():9e15);});
   document.getElementById('confCount').textContent=aconf.length?('('+aconf.length+' en attente)'):'';
@@ -214,7 +221,7 @@ function render(rows){
   var tally={}; sessions.forEach(function(s){s.items.forEach(function(i){tally[i.plateforme]=(tally[i.plateforme]||0)+i.places;});});
   var order=Object.keys(tally).sort(function(a,b){return tally[b]-tally[a];});
   document.getElementById('byPlatform').innerHTML = order.length
-    ? order.map(function(p){return '<div class="pf-row"><div class="pf-name">'+p+'</div><div class="pf-bar"><i style="width:'+Math.round(tally[p]/part*100)+'%"></i></div><div class="pf-val">'+tally[p]+' pers</div></div>';}).join('')+'<p class="foot">Total : '+part+' participants à venir.</p>'
+    ? order.map(function(p){return '<div class="pf-row"><div class="pf-name">'+(p||'?')+'</div><div class="pf-bar"><i style="width:'+Math.round(tally[p]/part*100)+'%"></i></div><div class="pf-val">'+tally[p]+' pers</div></div>';}).join('')+'<p class="foot">Total : '+part+' participants à venir.</p>'
     : '<p class="foot">—</p>';
 
   renderCal();
