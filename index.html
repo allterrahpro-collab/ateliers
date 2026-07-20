@@ -143,7 +143,7 @@ async function load(){
     id:r[0], date:parseDate(r[1]), heure:parseTime(r[2]), atelier:(r[3]||'').trim(),
     plateforme:(r[4]||'').trim(), numref:(r[5]||'').trim(), places:parseInt(r[6]||'0',10)||0,
     statut:(r[7]||'').trim().toLowerCase(), effectue:r[8]
-  })).filter(r=>r.atelier);
+  })).filter(r=>r.atelier && r.statut);
   LASTROWS=rows; render(rows);
 }
 
@@ -157,7 +157,7 @@ function render(rows){
   rows.filter(r=>r.date && r.heure && !/définir/.test(r.statut)).forEach(r=>{
     const k=r.atelier+'|'+r.date.getTime()+'|'+r.heure;
     if(!map.has(k)) map.set(k,{atelier:r.atelier,date:r.date,heure:r.heure,items:[],tot:0});
-    const s=map.get(k); s.items.push(r); if(r.statut==='annulé') s.tot-=r.places; else if(r.statut!=='à confirmer') s.tot+=r.places;
+    const s=map.get(k); s.items.push(r); if(r.statut==='annulé'||r.statut==='déplacé') s.tot-=r.places; else if(r.statut!=='à confirmer') s.tot+=r.places;
   });
   const allSessions=[...map.values()].map(s=>{ s.cap=capOf(s.atelier); return s; }).sort((a,b)=>a.date-b.date||a.heure.localeCompare(b.heure));
   const sessions=allSessions.filter(s=>s.date>=today0);
