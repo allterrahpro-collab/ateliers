@@ -115,8 +115,12 @@ function pad(n){ n=String(n); return n.length<2?'0'+n:n; }
 function fmt(dt){ return DAY_NAMES[dt.getDay()]+' '+dt.getDate()+' '+MONTH_NAMES[dt.getMonth()]+' '+dt.getFullYear(); }
 function capOf(t){ return CAP[t]||10; }
 function statusOf(rem){ if(rem<=0) return {cls:'full',label: rem<0?('Surbooké ('+(-rem)+')'):'Complet'}; if(rem<=THRESHOLD) return {cls:'warn',label: rem+' restante'+(rem>1?'s':'')}; return {cls:'ok',label: rem+' libres'}; }
-function parseDate(s){ if(!s) return null; let m=String(s).match(/Date\((\d+),(\d+),(\d+)/); if(m) return new Date(+m[1],+m[2],+m[3]); m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})/); if(m) return new Date(+m[1],+m[2]-1,+m[3]); return null; }
-function parseTime(s){ if(!s) return ''; let m=String(s).match(/(\d{1,2}):(\d{2})/); if(m) return pad(+m[1])+':'+m[2]; m=String(s).match(/Date\(\d+,\d+,\d+,(\d+),(\d+)/); if(m) return pad(+m[1])+':'+pad(+m[2]); return ''; }
+function parseDate(s){ if(!s) return null; let m=String(s).match(/Date\((\d+),(\d+),(\d+)/); if(m) return new Date(+m[1],+m[2],+m[3]); m=String(s).match(/(\d{4})-(\d{1,2})-(\d{1,2})/); if(m) return new Date(+m[1],+m[2]-1,+m[3]);
+  const n=Number(String(s).replace(',','.').trim()); if(!isNaN(n)&&n>20000&&n<80000){ const d=new Date(1899,11,30); d.setDate(d.getDate()+Math.floor(n)); d.setHours(0,0,0,0); return d; }
+  return null; }
+function parseTime(s){ if(s===null||s===undefined||s==='') return ''; let m=String(s).match(/(\d{1,2}):(\d{2})/); if(m) return pad(+m[1])+':'+m[2]; m=String(s).match(/Date\(\d+,\d+,\d+,(\d+),(\d+)/); if(m) return pad(+m[1])+':'+pad(+m[2]);
+  const n=Number(String(s).replace(',','.').trim()); if(!isNaN(n)&&n>=0&&n<1){ const mins=Math.round(n*1440); return pad(Math.floor(mins/60))+':'+pad(mins%60); }
+  return ''; }
 function isDone(v){ v=(v||'').toString().toLowerCase(); return v==='true'||v==='oui'||v==='1'||v==='x'||v==='vrai'; }
 
 function parseCSV(text){
@@ -153,7 +157,7 @@ function render(rows){
   rows.filter(r=>r.date && r.heure && !/définir/.test(r.statut)).forEach(r=>{
     const k=r.atelier+'|'+r.date.getTime()+'|'+r.heure;
     if(!map.has(k)) map.set(k,{atelier:r.atelier,date:r.date,heure:r.heure,items:[],tot:0});
-    const s=map.get(k); s.items.push(r); if(r.statut!=='à confirmer') s.tot+=r.places;
+    const s=map.get(k); s.items.push(r); if(r.statut==='annulé') s.tot-=r.places; else if(r.statut!=='à confirmer') s.tot+=r.places;
   });
   const allSessions=[...map.values()].map(s=>{ s.cap=capOf(s.atelier); return s; }).sort((a,b)=>a.date-b.date||a.heure.localeCompare(b.heure));
   const sessions=allSessions.filter(s=>s.date>=today0);
