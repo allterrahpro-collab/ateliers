@@ -106,14 +106,19 @@ let LASTROWS=[], LASTSESSIONS=[], CAL_Y=null, CAL_M=null;
 // ==== État partagé (écrit dans le Google Sheet via Make, donc visible partout) ====
 const WEBHOOK = "https://hook.eu1.make.com/8fsem62wxyti50bfzwkxxwiqzf4god1h";
 const META_TYPES = {"animateur":1,"retire":1,"fait":1};
-let META=[], METAMAP={}, LOCAL={};
+let META=[], METAMAP={};
+// LOCAL = tampon persistant dans ce navigateur : réponse immédiate en attendant
+// que le Google Sheet (mis en cache par Google plusieurs minutes) soit relu.
+function loadLocal(){ try{ return JSON.parse(localStorage.getItem('terrah_meta')||'{}'); }catch(e){ return {}; } }
+function saveLocal(o){ try{ localStorage.setItem('terrah_meta', JSON.stringify(o)); }catch(e){} }
+let LOCAL=loadLocal();
 function ymd(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
 function pushMeta(type,s,valeur){
   var u=WEBHOOK+'?type='+encodeURIComponent(type)+'&atelier='+encodeURIComponent(s.atelier)
       +'&date='+encodeURIComponent(ymd(s.date))+'&heure='+encodeURIComponent(s.heure)
       +'&valeur='+encodeURIComponent(valeur);
   try{ fetch(u,{mode:'no-cors'}); }catch(e){}
-  LOCAL[type+'|'+skey(s)]=valeur;
+  LOCAL[type+'|'+skey(s)]=valeur; saveLocal(LOCAL);
   render(LASTROWS);
 }
 function metaVal(type,s){ var k=type+'|'+skey(s); if(k in LOCAL) return LOCAL[k]; return METAMAP[k]!==undefined?METAMAP[k]:''; }
@@ -159,7 +164,7 @@ function parseCSV(text){
 
 async function load(){
   let text;
-  try{ const r=await fetch(URL); text=await r.text(); }
+  try{ const r=await fetch(URL+'&cb='+Date.now()); text=await r.text(); }
   catch(e){ document.getElementById('status').innerHTML='<div class="banner err">Impossible de charger le Google Sheet. Vérifie qu\'il est partagé en « Tous les utilisateurs disposant du lien : Lecteur ».</div>'; return; }
   const raw=parseCSV(text);
   if(!raw.length){ document.getElementById('status').innerHTML='<div class="banner err">Aucune donnée. Le Sheet est-il partagé en lecture publique ?</div>'; return; }
@@ -178,7 +183,10 @@ function refLabel(r){ return r.plateforme + (r.numref?(' #'+r.numref):''); }
 function render(rows){
   const today0=new Date(); today0.setHours(0,0,0,0);
   document.getElementById('genline').textContent='Mis à jour à l\'ouverture de la page · '+fmt(new Date());
-  METAMAP={}; META.forEach(function(m){ if(!m.date||!m.heure) return; METAMAP[m.statut+'|'+m.atelier+'|'+m.date.getTime()+'|'+m.heure]=(m.numref||''); });
+  METAMAP={}; META.forEach(function(m){ if(!m.date||!m.heure) return; METAMAP[m.statut+'|'+m.atelier+'|'+m.date.getTime()+'|'+m.heure]=(m.plateforme||m.numref||''); });
+  // dès que le Sheet a rattrapé une valeur, on purge le tampon local (le Sheet redevient la référence)
+  var purged=false; Object.keys(LOCAL).forEach(function(k){ if(METAMAP[k]!==undefined && METAMAP[k]===LOCAL[k]){ delete LOCAL[k]; purged=true; } });
+  if(purged) saveLocal(LOCAL);
 
   const map=new Map();
   rows.filter(r=>r.date && r.heure && !/définir/.test(r.statut)).forEach(r=>{
