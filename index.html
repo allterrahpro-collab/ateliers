@@ -71,7 +71,7 @@ td.num{ text-align:center; font-variant-numeric:tabular-nums; }
     <div id="cancelList"></div></div>
 
   <div class="section"><h2>Ateliers sans animateur <span class="src" id="animCount"></span></h2>
-    <p class="foot">Clique sur « + désigner » pour indiquer qui anime. L'info est enregistrée dans le Google Sheet — donc visible depuis n'importe quel appareil, pas seulement ce navigateur.</p>
+    <p class="foot">Uniquement les ateliers qui ont atteint le minimum de participants, donc confirmés (Latte Art&nbsp;4, Dégustation&nbsp;5, Torréfaction&nbsp;2) — les autres ne sont pas encore sûrs d'avoir lieu. Clique sur « + désigner » ; l'info est enregistrée dans le Google Sheet, donc visible depuis n'importe quel appareil.</p>
     <div id="sansAnim"></div></div>
 
   <div class="section"><h2>Réservations à confirmer <span class="src" id="confCount"></span></h2>
@@ -254,12 +254,14 @@ function render(rows){
     : '<p class="foot">Aucune session à venir.</p>';
   Array.prototype.forEach.call(document.querySelectorAll('.animlink'), function(a){ a.addEventListener('click', function(e){ e.preventDefault(); var s=SESSBYKEY[decodeURIComponent(a.getAttribute('data-s'))]; if(s) setAnim(s); }); });
 
-  var sansAnim=sessions.filter(function(s){ return !metaVal('animateur',s); });
-  document.getElementById('animCount').textContent=sansAnim.length?('('+sansAnim.length+' à pourvoir)'):'';
+  var sansAnim=sessions.filter(function(s){ return !metaVal('animateur',s) && s.tot>=minOf(s.atelier); });
+  var sansAnimUrg=sansAnim.filter(function(s){ return s.date < soon; });
+  document.getElementById('animCount').textContent=sansAnim.length?('('+sansAnim.length+' à pourvoir'+(sansAnimUrg.length?(' · '+sansAnimUrg.length+' urgent'+(sansAnimUrg.length>1?'s':'')):'')+')'):'';
   document.getElementById('sansAnim').innerHTML = sansAnim.length
-    ? '<table><thead><tr><th>Créneau</th><th>Atelier</th><th class="num">Places</th><th>Animateur</th></tr></thead><tbody>'+
-      sansAnim.map(function(s){return '<tr><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td class="num">'+s.tot+'/'+s.cap+'</td><td><a href="#" class="animlink" data-s="'+encodeURIComponent(skey(s))+'"><span class="anim none">+ désigner</span></a></td></tr>';}).join('')+'</tbody></table>'
-    : '<p class="foot">Tous les ateliers à venir ont un animateur 🎉</p>';
+    ? '<table><thead><tr><th>Créneau</th><th>Atelier</th><th class="num">Places</th><th>Délai</th><th>Animateur</th></tr></thead><tbody>'+
+      sansAnim.map(function(s){var urg=s.date<soon;var j=Math.round((s.date-today0)/86400000);
+        return '<tr><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td class="num">'+s.tot+'/'+s.cap+'</td><td><span class="pill '+(urg?'full':'ok')+'">'+(j<=0?'aujourd\'hui':('dans '+j+' j'))+'</span></td><td><a href="#" class="animlink" data-s="'+encodeURIComponent(skey(s))+'"><span class="anim none">+ désigner</span></a></td></tr>';}).join('')+'</tbody></table>'
+    : '<p class="foot">Tous les ateliers confirmés ont un animateur 🎉</p>';
   Array.prototype.forEach.call(document.querySelectorAll('#sansAnim .animlink'), function(a){ a.addEventListener('click', function(e){ e.preventDefault(); var s=SESSBYKEY[decodeURIComponent(a.getAttribute('data-s'))]; if(s) setAnim(s); }); });
 
   var DEF=loadSet('terrah_def');
