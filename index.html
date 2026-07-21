@@ -41,6 +41,10 @@ td.num{ text-align:center; font-variant-numeric:tabular-nums; }
 .pf-row{ display:flex; align-items:center; gap:10px; padding:5px 0; }
 .pf-name{ width:130px; font-size:13px; } .pf-bar{ flex:1; height:9px; background:#eee7df; border-radius:5px; overflow:hidden; } .pf-bar>i{ display:block; height:100%; background:#8a6d4f; } .pf-val{ width:90px; text-align:right; font-size:12.5px; }
 .done{ opacity:.5; }
+.anim{ font-weight:600; color:#3f6b22; }
+.anim.none{ color:#b3261e; font-weight:600; }
+.animlink{ text-decoration:none; }
+.animlink:hover .anim{ text-decoration:underline; }
 .navbtn{ border:1px solid #e7e0d8; background:#fff; border-radius:8px; padding:2px 12px; font-size:16px; line-height:1.4; cursor:pointer; color:#5c544c; }
 .navbtn:hover{ background:#f2ece4; }
 .calhead{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
@@ -65,6 +69,10 @@ td.num{ text-align:center; font-variant-numeric:tabular-nums; }
   <div class="section"><h2>À annuler <span class="src" id="cancelCount"></span></h2>
     <p class="foot">Ateliers dans moins de 7 jours dont le nombre de participants est sous le minimum requis (Latte Art&nbsp;4, Dégustation&nbsp;5, Torréfaction&nbsp;2). Coche « Fait » une fois traité.</p>
     <div id="cancelList"></div></div>
+
+  <div class="section"><h2>Ateliers sans animateur <span class="src" id="animCount"></span></h2>
+    <p class="foot">Clique sur « + désigner » pour indiquer qui anime. L'info est enregistrée dans le Google Sheet — donc visible depuis n'importe quel appareil, pas seulement ce navigateur.</p>
+    <div id="sansAnim"></div></div>
 
   <div class="section"><h2>Réservations à confirmer <span class="src" id="confCount"></span></h2>
     <p class="foot">Demandes en attente (souvent des demandes Funbooker) — à valider sur la plateforme avant expiration. Non comptées dans les places tant qu'elles ne sont pas confirmées.</p>
@@ -95,6 +103,22 @@ const THRESHOLD = 2;
 const CANCEL_DAYS = 7;
 function minOf(t){ return MIN[t]||0; }
 let LASTROWS=[], LASTSESSIONS=[], CAL_Y=null, CAL_M=null;
+// ==== État partagé (écrit dans le Google Sheet via Make, donc visible partout) ====
+const WEBHOOK = "https://hook.eu1.make.com/8fsem62wxyti50bfzwkxxwiqzf4god1h";
+const META_TYPES = {"animateur":1,"retire":1,"fait":1};
+let META=[], METAMAP={}, LOCAL={};
+function ymd(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function pushMeta(type,s,valeur){
+  var u=WEBHOOK+'?type='+encodeURIComponent(type)+'&atelier='+encodeURIComponent(s.atelier)
+      +'&date='+encodeURIComponent(ymd(s.date))+'&heure='+encodeURIComponent(s.heure)
+      +'&valeur='+encodeURIComponent(valeur);
+  try{ fetch(u,{mode:'no-cors'}); }catch(e){}
+  LOCAL[type+'|'+skey(s)]=valeur;
+  render(LASTROWS);
+}
+function metaVal(type,s){ var k=type+'|'+skey(s); if(k in LOCAL) return LOCAL[k]; return METAMAP[k]!==undefined?METAMAP[k]:''; }
+function toggleMeta(type,s){ pushMeta(type,s, metaVal(type,s)?'':'ok'); }
+function setAnim(s){ var cur=metaVal('animateur',s); var v=prompt('Animateur pour '+s.atelier+' du '+fmt(s.date)+' '+s.heure+' :', cur||''); if(v!==null) pushMeta('animateur',s,v.trim()); }
 function skey(s){ return s.atelier+'|'+(s.date?s.date.getTime():'')+'|'+s.heure; }
 function pfClass(p){ if(/funbooker/i.test(p))return 'Funbooker'; if(/wecandoo/i.test(p))return 'Wecandoo'; if(/shopify/i.test(p))return 'Shopify'; if(/cap/i.test(p))return 'Cap'; return 'x'; }
 function pfTags(items){ var set=[]; items.forEach(function(i){ if(i.plateforme && set.indexOf(i.plateforme)<0) set.push(i.plateforme); }); if(!set.length) return '<span class="pf x">?</span>'; return set.map(function(p){return '<span class="pf '+pfClass(p)+'">'+p+'</span>';}).join(''); }
@@ -144,7 +168,9 @@ async function load(){
     plateforme:(r[4]||'').trim(), numref:(r[5]||'').trim(), places:parseInt(r[6]||'0',10)||0,
     statut:(r[7]||'').trim().toLowerCase(), effectue:r[8]
   })).filter(r=>r.atelier && r.statut);
-  LASTROWS=rows; render(rows);
+  META=rows.filter(r=>META_TYPES[r.statut]);
+  const resas=rows.filter(r=>!META_TYPES[r.statut]);
+  LASTROWS=resas; render(resas);
 }
 
 function refLabel(r){ return r.plateforme + (r.numref?(' #'+r.numref):''); }
@@ -152,6 +178,7 @@ function refLabel(r){ return r.plateforme + (r.numref?(' #'+r.numref):''); }
 function render(rows){
   const today0=new Date(); today0.setHours(0,0,0,0);
   document.getElementById('genline').textContent='Mis à jour à l\'ouverture de la page · '+fmt(new Date());
+  METAMAP={}; META.forEach(function(m){ if(!m.date||!m.heure) return; METAMAP[m.statut+'|'+m.atelier+'|'+m.date.getTime()+'|'+m.heure]=(m.numref||''); });
 
   const map=new Map();
   rows.filter(r=>r.date && r.heure && !/définir/.test(r.statut)).forEach(r=>{
@@ -163,17 +190,16 @@ function render(rows){
   const sessions=allSessions.filter(s=>s.date>=today0);
   LASTSESSIONS=sessions;
 
-  const RETIRE=loadRetire();
+  var SESSBYKEY={}; sessions.forEach(function(s){ SESSBYKEY[skey(s)]=s; });
   const atRisk=sessions.filter(s=>s.cap-s.tot<=THRESHOLD);
-  const atRiskOpen=atRisk.filter(s=>!RETIRE.has(skey(s)));
+  const atRiskOpen=atRisk.filter(s=>!metaVal('retire',s));
   const part=sessions.reduce((a,s)=>a+s.tot,0);
   const adef=rows.filter(r=>/définir/.test(r.statut));
   const adefOpen=adef.filter(r=>!isDone(r.effectue));
-  const DONE=loadDone();
   const soon=new Date(today0); soon.setDate(soon.getDate()+CANCEL_DAYS);
   const toCancel=sessions.filter(function(s){return s.date < soon && s.tot < minOf(s.atelier);})
-    .sort(function(a,b){var da=DONE.has(skey(a)),db=DONE.has(skey(b)); if(da!==db) return da?1:-1; return a.date-b.date||a.heure.localeCompare(b.heure);});
-  const toCancelOpen=toCancel.filter(function(s){return !DONE.has(skey(s));});
+    .sort(function(a,b){var da=!!metaVal('fait',a),db=!!metaVal('fait',b); if(da!==db) return da?1:-1; return a.date-b.date||a.heure.localeCompare(b.heure);});
+  const toCancelOpen=toCancel.filter(function(s){return !metaVal('fait',s);});
 
   document.getElementById('cards').innerHTML=
     '<div class="card"><div class="n">'+sessions.length+'</div><div class="l">sessions à venir</div></div>'+
@@ -190,22 +216,22 @@ function render(rows){
   ab.innerHTML=alerts.length?alerts.join(' · '):'<b>✅ Tout est à jour.</b>';
 
   const pulls=sessions.map(s=>({s,rem:s.cap-s.tot})).filter(o=>o.rem<=THRESHOLD)
-    .sort(function(a,b){var ra=RETIRE.has(skey(a.s)),rb=RETIRE.has(skey(b.s)); if(ra!==rb) return ra?1:-1; return a.rem-b.rem;});
+    .sort(function(a,b){var ra=!!metaVal('retire',a.s),rb=!!metaVal('retire',b.s); if(ra!==rb) return ra?1:-1; return a.rem-b.rem;});
   document.getElementById('pullCount').textContent=atRiskOpen.length?('('+atRiskOpen.length+' à traiter)'):'';
   document.getElementById('pullList').innerHTML = pulls.length
     ? '<table><thead><tr><th>Validé</th><th>Créneau</th><th>Atelier</th><th class="num">Places</th><th>Statut</th><th>Réservations</th></tr></thead><tbody>'+
-      pulls.map(function(o){var s=o.s,rem=o.rem,st=statusOf(rem);var refs=s.items.map(refLabel).join(', ');var k=skey(s);var done=RETIRE.has(k);
+      pulls.map(function(o){var s=o.s,rem=o.rem,st=statusOf(rem);var refs=s.items.map(refLabel).join(', ');var k=skey(s);var done=!!metaVal('retire',s);
         return '<tr class="'+(done?'done':'')+'"><td class="num"><input type="checkbox" data-k="'+encodeURIComponent(k)+'"'+(done?' checked':'')+'></td><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td class="num">'+s.tot+'/'+s.cap+'</td><td><span class="pill '+st.cls+'">'+st.label+'</span></td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
     : '<p class="foot">Aucun atelier à retirer 🎉</p>';
-  Array.prototype.forEach.call(document.querySelectorAll('#pullList input[type=checkbox]'), function(c){ c.addEventListener('change', function(){ toggleRetire(decodeURIComponent(c.getAttribute('data-k'))); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('#pullList input[type=checkbox]'), function(c){ c.addEventListener('change', function(){ var s=SESSBYKEY[decodeURIComponent(c.getAttribute('data-k'))]; if(s) toggleMeta('retire',s); }); });
 
   document.getElementById('cancelCount').textContent=toCancelOpen.length?('('+toCancelOpen.length+' à traiter)'):'';
   document.getElementById('cancelList').innerHTML = toCancel.length
     ? '<table><thead><tr><th>Fait</th><th>Créneau</th><th>Atelier</th><th>Plateforme</th><th class="num">Places</th><th class="num">Min</th><th>Réservations</th></tr></thead><tbody>'+
-      toCancel.map(function(s){var refs=s.items.map(refLabel).join(', ')||'—';var k=skey(s);var done=DONE.has(k);
+      toCancel.map(function(s){var refs=s.items.map(refLabel).join(', ')||'—';var k=skey(s);var done=!!metaVal('fait',s);
         return '<tr class="'+(done?'done':'')+'"><td class="num"><input type="checkbox" data-c="'+encodeURIComponent(k)+'"'+(done?' checked':'')+'></td><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td>'+pfTags(s.items)+'</td><td class="num"><span class="pill full">'+s.tot+'/'+s.cap+'</span></td><td class="num">'+minOf(s.atelier)+'</td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
     : '<p class="foot">Aucun atelier à annuler 🎉</p>';
-  Array.prototype.forEach.call(document.querySelectorAll('#cancelList input[type=checkbox]'), function(c){ c.addEventListener('change', function(){ toggleDone(decodeURIComponent(c.getAttribute('data-c'))); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('#cancelList input[type=checkbox]'), function(c){ c.addEventListener('change', function(){ var s=SESSBYKEY[decodeURIComponent(c.getAttribute('data-c'))]; if(s) toggleMeta('fait',s); }); });
 
   var CONF=loadSet('terrah_conf');
   var aconf=rows.filter(function(r){return r.statut==='à confirmer' && (!r.date || r.date>=today0);})
@@ -218,11 +244,23 @@ function render(rows){
     : '<p class="foot">Aucune réservation en attente 🎉</p>';
   Array.prototype.forEach.call(document.querySelectorAll('#aconfirmer input[type=checkbox]'), function(c){ c.addEventListener('change', function(){ toggleSet('terrah_conf', decodeURIComponent(c.getAttribute('data-conf'))); }); });
 
+  var SESSBYKEY={}; sessions.forEach(function(s){ SESSBYKEY[skey(s)]=s; });
   document.getElementById('sessions').innerHTML = sessions.length
-    ? '<table><thead><tr><th>Date</th><th class="num">Heure</th><th>Atelier</th><th>Plateforme</th><th class="num">Places</th><th>Statut</th><th>Réservations</th></tr></thead><tbody>'+
+    ? '<table><thead><tr><th>Date</th><th class="num">Heure</th><th>Atelier</th><th>Animateur</th><th>Plateforme</th><th class="num">Places</th><th>Statut</th><th>Réservations</th></tr></thead><tbody>'+
       sessions.map(function(s){var rem=s.cap-s.tot,st=statusOf(rem);var refs=s.items.map(function(i){return refLabel(i)+' ×'+i.places+(i.statut==='à confirmer'?' (à confirmer)':'');}).join(' · ');
-        return '<tr><td>'+fmt(s.date)+'</td><td class="num">'+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td>'+pfTags(s.items)+'</td><td class="num">'+s.tot+'/'+s.cap+'</td><td><span class="pill '+st.cls+'">'+st.label+'</span></td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
+        var an=metaVal('animateur',s);
+        var anCell=an?('<span class="anim">'+an+'</span>'):'<span class="anim none">à définir</span>';
+        return '<tr><td>'+fmt(s.date)+'</td><td class="num">'+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td><a href="#" class="animlink" data-s="'+encodeURIComponent(skey(s))+'">'+anCell+'</a></td><td>'+pfTags(s.items)+'</td><td class="num">'+s.tot+'/'+s.cap+'</td><td><span class="pill '+st.cls+'">'+st.label+'</span></td><td class="ref">'+refs+'</td></tr>';}).join('')+'</tbody></table>'
     : '<p class="foot">Aucune session à venir.</p>';
+  Array.prototype.forEach.call(document.querySelectorAll('.animlink'), function(a){ a.addEventListener('click', function(e){ e.preventDefault(); var s=SESSBYKEY[decodeURIComponent(a.getAttribute('data-s'))]; if(s) setAnim(s); }); });
+
+  var sansAnim=sessions.filter(function(s){ return !metaVal('animateur',s); });
+  document.getElementById('animCount').textContent=sansAnim.length?('('+sansAnim.length+' à pourvoir)'):'';
+  document.getElementById('sansAnim').innerHTML = sansAnim.length
+    ? '<table><thead><tr><th>Créneau</th><th>Atelier</th><th class="num">Places</th><th>Animateur</th></tr></thead><tbody>'+
+      sansAnim.map(function(s){return '<tr><td>'+fmt(s.date)+' '+s.heure+'</td><td><span class="tag">'+s.atelier+'</span></td><td class="num">'+s.tot+'/'+s.cap+'</td><td><a href="#" class="animlink" data-s="'+encodeURIComponent(skey(s))+'"><span class="anim none">+ désigner</span></a></td></tr>';}).join('')+'</tbody></table>'
+    : '<p class="foot">Tous les ateliers à venir ont un animateur 🎉</p>';
+  Array.prototype.forEach.call(document.querySelectorAll('#sansAnim .animlink'), function(a){ a.addEventListener('click', function(e){ e.preventDefault(); var s=SESSBYKEY[decodeURIComponent(a.getAttribute('data-s'))]; if(s) setAnim(s); }); });
 
   var DEF=loadSet('terrah_def');
   document.getElementById('adefinir').innerHTML = adef.length
